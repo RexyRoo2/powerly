@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  /* Powerly brand palette — warm dark */
+  --color-espresso: #1c1712; /* background */
+  --color-umber: #2a231b; /* cards / surfaces */
+  --color-cream: #f2e9da; /* text */
+  --color-forest: #4b6a50; /* primary actions */
+  --color-clay: #d97a52; /* AI-specific actions only */
+  --color-sage: #8fa389; /* quiet / secondary accents */
+
+  --background: var(--color-espresso);
+  --foreground: var(--color-cream);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-espresso: var(--color-espresso);
+  --color-umber: var(--color-umber);
+  --color-cream: var(--color-cream);
+  --color-forest: var(--color-forest);
+  --color-clay: var(--color-clay);
+  --color-sage: var(--color-sage);
+
+  --font-sans: "Inter", sans-serif;
+  --font-display: "Instrument Serif", serif;
+  --font-logo: "Outfit", sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+}
