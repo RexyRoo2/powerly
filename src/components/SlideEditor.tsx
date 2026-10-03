@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Slide as SlideType, SlideElement } from "@/lib/schema";
+import type { Slide as SlideType, SlideElement, Theme } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle, pixelDeltaToLogical } from "@/lib/coordinates";
+import { THEMES, resolveColor } from "@/lib/themes";
 
 type DragState = {
   id: string;
@@ -16,24 +17,35 @@ type DragState = {
 
 /**
  * An editable version of a slide: click an element to select it, drag it to
- * move it, double-click a text element to edit its content. State is local
- * to this component — nothing persists yet, that's a later milestone.
+ * move it, double-click a text element to edit its content.
+ *
+ * Controlled component — the slide's content lives in the parent (so it
+ * survives switching to another slide and back); this component only owns
+ * transient UI state (what's selected, what's being edited, the in-flight
+ * drag).
  */
-export default function SlideEditor({ slide: initialSlide }: { slide: SlideType }) {
-  const [slide, setSlide] = useState(initialSlide);
+export default function SlideEditor({
+  slide,
+  theme,
+  onChange,
+}: {
+  slide: SlideType;
+  theme: Theme;
+  onChange: (slide: SlideType) => void;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<DragState | null>(null);
 
-  const updateElement = useCallback((id: string, patch: Record<string, unknown>) => {
-    setSlide((prev) => ({
-      ...prev,
-      elements: prev.elements.map((el) =>
+  const updateElement = (id: string, patch: Record<string, unknown>) => {
+    onChange({
+      ...slide,
+      elements: slide.elements.map((el) =>
         el.id === id ? ({ ...el, ...patch } as SlideElement) : el
       ),
-    }));
-  }, []);
+    });
+  };
 
   const handleElementPointerDown = (e: ReactPointerEvent, element: SlideElement) => {
     if (editingId === element.id) return; // typing — don't start a drag
@@ -72,7 +84,7 @@ export default function SlideEditor({ slide: initialSlide }: { slide: SlideType 
       className="relative w-full select-none overflow-hidden rounded-2xl shadow-2xl"
       style={{
         aspectRatio: `${SLIDE_WIDTH} / ${SLIDE_HEIGHT}`,
-        backgroundColor: slide.background,
+        backgroundColor: resolveColor(slide.background, theme),
         containerType: "size",
       }}
       onPointerMove={handlePointerMove}
@@ -86,6 +98,7 @@ export default function SlideEditor({ slide: initialSlide }: { slide: SlideType 
         <EditableElement
           key={element.id}
           element={element}
+          theme={theme}
           selected={selectedId === element.id}
           editing={editingId === element.id}
           onPointerDown={(e) => handleElementPointerDown(e, element)}
@@ -104,6 +117,7 @@ export default function SlideEditor({ slide: initialSlide }: { slide: SlideType 
 
 function EditableElement({
   element,
+  theme,
   selected,
   editing,
   onPointerDown,
@@ -111,6 +125,7 @@ function EditableElement({
   onCommitText,
 }: {
   element: SlideElement;
+  theme: Theme;
   selected: boolean;
   editing: boolean;
   onPointerDown: (e: ReactPointerEvent) => void;
@@ -118,17 +133,19 @@ function EditableElement({
   onCommitText: (text: string) => void;
 }) {
   const style = boxStyle(element);
+  const tokens = THEMES[theme];
+  // Selection chrome is a Powerly editor affordance, not part of the slide's
+  // own design — it stays brand-clay regardless of the active slide theme.
   const selectionOutline = selected ? "2px solid #D97A52" : "2px solid transparent";
 
   switch (element.type) {
     case "text": {
-      const fontFamilyVar =
-        element.fontFamily === "display" ? "var(--font-display)" : "var(--font-sans)";
+      const fontFamilyVar = element.fontFamily === "display" ? tokens.fontDisplay : tokens.fontBody;
       const textStyle = {
         fontFamily: fontFamilyVar,
         fontSize: `${(element.fontSize / SLIDE_HEIGHT) * 100}cqh`,
         fontWeight: element.fontWeight,
-        color: element.color,
+        color: resolveColor(element.color, theme),
         textAlign: element.align,
         lineHeight: element.lineHeight,
       } as const;
@@ -175,14 +192,16 @@ function EditableElement({
         </div>
       );
     }
-    case "shape":
+    case "shape": {
+      const fill = resolveColor(element.fill, theme);
+      const stroke = element.stroke ? resolveColor(element.stroke, theme) : undefined;
       return (
         <div
           onPointerDown={onPointerDown}
           style={{
             ...style,
-            backgroundColor: element.fill,
-            border: element.stroke ? `1px solid ${element.stroke}` : undefined,
+            backgroundColor: fill,
+            border: stroke ? `1px solid ${stroke}` : undefined,
             borderRadius:
               element.shape === "ellipse" ? "50%" : `${(element.radius / SLIDE_WIDTH) * 100}%`,
             cursor: "grab",
@@ -191,6 +210,7 @@ function EditableElement({
           }}
         />
       );
+    }
     case "image":
       return (
         // eslint-disable-next-line @next/next/no-img-element
@@ -214,7 +234,7 @@ function EditableElement({
           onPointerDown={onPointerDown}
           style={{
             ...style,
-            backgroundColor: element.color,
+            backgroundColor: resolveColor(element.color, theme),
             height: element.thickness,
             cursor: "grab",
             outline: selectionOutline,

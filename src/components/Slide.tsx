@@ -1,12 +1,14 @@
-import type { Slide as SlideType, SlideElement } from "@/lib/schema";
+import type { Slide as SlideType, SlideElement, Theme } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle } from "@/lib/coordinates";
+import { THEMES, resolveColor } from "@/lib/themes";
 
-function ElementRenderer({ element }: { element: SlideElement }) {
+function ElementRenderer({ element, theme }: { element: SlideElement; theme: Theme }) {
+  const tokens = THEMES[theme];
+
   switch (element.type) {
     case "text": {
-      const fontFamilyVar =
-        element.fontFamily === "display" ? "var(--font-display)" : "var(--font-sans)";
+      const fontFamilyVar = element.fontFamily === "display" ? tokens.fontDisplay : tokens.fontBody;
       return (
         <div
           style={{
@@ -14,7 +16,7 @@ function ElementRenderer({ element }: { element: SlideElement }) {
             fontFamily: fontFamilyVar,
             fontSize: `${(element.fontSize / SLIDE_HEIGHT) * 100}cqh`,
             fontWeight: element.fontWeight,
-            color: element.color,
+            color: resolveColor(element.color, theme),
             textAlign: element.align,
             lineHeight: element.lineHeight,
             whiteSpace: "pre-wrap",
@@ -25,25 +27,16 @@ function ElementRenderer({ element }: { element: SlideElement }) {
       );
     }
     case "shape": {
-      if (element.shape === "ellipse") {
-        return (
-          <div
-            style={{
-              ...boxStyle(element),
-              backgroundColor: element.fill,
-              border: element.stroke ? `1px solid ${element.stroke}` : undefined,
-              borderRadius: "50%",
-            }}
-          />
-        );
-      }
+      const fill = resolveColor(element.fill, theme);
+      const stroke = element.stroke ? resolveColor(element.stroke, theme) : undefined;
       return (
         <div
           style={{
             ...boxStyle(element),
-            backgroundColor: element.fill,
-            border: element.stroke ? `1px solid ${element.stroke}` : undefined,
-            borderRadius: `${(element.radius / SLIDE_WIDTH) * 100}%`,
+            backgroundColor: fill,
+            border: stroke ? `1px solid ${stroke}` : undefined,
+            borderRadius:
+              element.shape === "ellipse" ? "50%" : `${(element.radius / SLIDE_WIDTH) * 100}%`,
           }}
         />
       );
@@ -66,7 +59,7 @@ function ElementRenderer({ element }: { element: SlideElement }) {
         <div
           style={{
             ...boxStyle(element),
-            backgroundColor: element.color,
+            backgroundColor: resolveColor(element.color, theme),
             height: element.thickness,
           }}
         />
@@ -77,18 +70,18 @@ function ElementRenderer({ element }: { element: SlideElement }) {
   }
 }
 
-export default function Slide({ slide }: { slide: SlideType }) {
+export default function Slide({ slide, theme }: { slide: SlideType; theme: Theme }) {
   return (
     <div
       className="relative w-full overflow-hidden rounded-2xl shadow-2xl"
       style={{
         aspectRatio: `${SLIDE_WIDTH} / ${SLIDE_HEIGHT}`,
-        backgroundColor: slide.background,
+        backgroundColor: resolveColor(slide.background, theme),
         containerType: "size",
       }}
     >
       {slide.elements.map((element) => (
-        <ElementRenderer key={element.id} element={element} />
+        <ElementRenderer key={element.id} element={element} theme={theme} />
       ))}
     </div>
   );

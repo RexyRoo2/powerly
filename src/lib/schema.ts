@@ -25,8 +25,13 @@ const BoxSchema = z.object({
   rotation: z.number().default(0).optional(),
 });
 
-/** A hex color string, e.g. "#1C1712". */
-const ColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "must be a hex color");
+/**
+ * Elements never carry a literal hex color. They point at a role in the
+ * active theme's palette instead — that's what makes switching themes
+ * actually restyle a deck, rather than just changing a label.
+ */
+export const ColorRoleSchema = z.enum(["background", "surface", "text", "accent", "muted"]);
+export type ColorRole = z.infer<typeof ColorRoleSchema>;
 
 // ---------------------------------------------------------------------------
 // Element types
@@ -40,7 +45,7 @@ export const TextElementSchema = BoxSchema.extend({
   fontFamily: z.enum(["display", "body"]).default("body"),
   fontSize: z.number().positive().default(18),
   fontWeight: z.union([z.literal(400), z.literal(500), z.literal(600), z.literal(700)]).default(400),
-  color: ColorSchema.default("#F2E9DA"),
+  color: ColorRoleSchema.default("text"),
   align: z.enum(["left", "center", "right"]).default("left"),
   lineHeight: z.number().positive().default(1.3),
 });
@@ -58,8 +63,8 @@ export const ShapeElementSchema = BoxSchema.extend({
   type: z.literal("shape"),
   id: z.string(),
   shape: z.enum(["rectangle", "ellipse", "line"]).default("rectangle"),
-  fill: ColorSchema.default("#2A231B"),
-  stroke: ColorSchema.optional(),
+  fill: ColorRoleSchema.default("surface"),
+  stroke: ColorRoleSchema.optional(),
   radius: z.number().min(0).default(0),
 });
 
@@ -67,13 +72,13 @@ export const IconElementSchema = BoxSchema.extend({
   type: z.literal("icon"),
   id: z.string(),
   name: z.string(),
-  color: ColorSchema.default("#8FA389"),
+  color: ColorRoleSchema.default("accent"),
 });
 
 export const LineElementSchema = BoxSchema.extend({
   type: z.literal("line"),
   id: z.string(),
-  color: ColorSchema.default("#8FA389"),
+  color: ColorRoleSchema.default("muted"),
   thickness: z.number().positive().default(2),
 });
 
@@ -139,7 +144,7 @@ export type Theme = z.infer<typeof ThemeSchema>;
 export const SlideSchema = z.object({
   id: z.string(),
   layout: z.string().default("blank"),
-  background: ColorSchema.default("#1C1712"),
+  background: ColorRoleSchema.default("background"),
   elements: z.array(SlideElementSchema),
 });
 export type Slide = z.infer<typeof SlideSchema>;
