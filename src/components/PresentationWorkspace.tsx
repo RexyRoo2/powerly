@@ -3,19 +3,19 @@
 import { useState } from "react";
 import type { Presentation } from "@/lib/schema";
 import { PresentationSchema } from "@/lib/schema";
-import PresentationEditor from "./PresentationEditor";
 
 type Status = "input" | "generating" | "error";
 
 export default function PresentationWorkspace({
   examplePresentation,
+  onPresentationReady,
 }: {
   examplePresentation: Presentation;
+  onPresentationReady: (presentation: Presentation) => void;
 }) {
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<Status>("input");
   const [error, setError] = useState<string | null>(null);
-  const [presentation, setPresentation] = useState<Presentation | null>(null);
 
   async function handleGenerate() {
     setStatus("generating");
@@ -31,16 +31,11 @@ export default function PresentationWorkspace({
         throw new Error(data?.error || "Something went wrong generating your deck.");
       }
       const parsed = PresentationSchema.parse(data.presentation);
-      setPresentation(parsed);
-      setStatus("input"); // back to idle, but presentation is now set so the editor shows
+      onPresentationReady(parsed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setStatus("error");
     }
-  }
-
-  if (presentation) {
-    return <PresentationEditor presentation={presentation} />;
   }
 
   return (
@@ -65,7 +60,7 @@ export default function PresentationWorkspace({
           {status === "generating" ? "Generating…" : "Generate presentation"}
         </button>
         <button
-          onClick={() => setPresentation(examplePresentation)}
+          onClick={() => onPresentationReady(examplePresentation)}
           disabled={status === "generating"}
           className="text-sm text-cream/50 underline-offset-2 hover:text-cream hover:underline"
         >

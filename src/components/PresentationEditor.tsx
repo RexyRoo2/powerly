@@ -14,8 +14,12 @@ type PendingEdit = {
 
 export default function PresentationEditor({
   presentation: initial,
+  presentationId = null,
+  onSaved,
 }: {
   presentation: Presentation;
+  presentationId?: string | null;
+  onSaved?: (id: string, presentation: Presentation) => void;
 }) {
   const [presentation, setPresentation] = useState(initial);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -25,6 +29,9 @@ export default function PresentationEditor({
   const [editError, setEditError] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<"idle" | "loading" | "error">("idle");
   const [exportError, setExportError] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(presentationId);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // While a pending edit is being previewed, every read/write goes through
   // it instead of the committed presentation — Apply promotes it, Discard
@@ -38,6 +45,7 @@ export default function PresentationEditor({
       setPendingEdit({ ...pendingEdit, presentation: updater(pendingEdit.presentation) });
     } else {
       setPresentation(updater);
+      setSaveStatus("idle"); // the committed deck just changed — "Saved" no longer applies
     }
   };
 
@@ -75,12 +83,38 @@ export default function PresentationEditor({
   function applyPendingEdit() {
     if (!pendingEdit) return;
     setPresentation(pendingEdit.presentation);
+    setSaveStatus("idle"); // the committed deck just changed — "Saved" no longer applies
     setPendingEdit(null);
     setInstruction("");
   }
 
   function discardPendingEdit() {
     setPendingEdit(null);
+  }
+
+  async function handleSave() {
+    // Saves the committed presentation, never a pending AI-edit preview —
+    // the Save button is disabled while one is open (see below) so this
+    // never has to guess which the student meant.
+    setSaveStatus("saving");
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/presentations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: savedId, presentation }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Couldn't save your presentation.");
+      }
+      setSavedId(data.id);
+      setSaveStatus("saved");
+      onSaved?.(data.id, presentation);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Couldn't save your presentation.");
+      setSaveStatus("error");
+    }
   }
 
   async function handleExport() {
@@ -150,14 +184,28 @@ export default function PresentationEditor({
               </button>
             ))}
           </div>
-          <button
-            onClick={handleExport}
-            disabled={exportStatus === "loading"}
-            className="shrink-0 rounded-full border border-sage/50 px-3 py-1 text-xs text-sage transition hover:bg-sage/10 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {exportStatus === "loading" ? "Preparing file…" : "Download PowerPoint"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saveStatus === "saving" || Boolean(pendingEdit)}
+              title={pendingEdit ? "Apply or discard the AI preview first" : undefined}
+              className="rounded-full bg-clay/90 px-3 py-1 text-xs font-medium text-espresso transition hover:bg-clay disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saveStatus === "saving" ? "Saving…" : savedId ? "Save" : "Save presentation"}
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={exportStatus === "loading"}
+              className="rounded-full border border-sage/50 px-3 py-1 text-xs text-sage transition hover:bg-sage/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {exportStatus === "loading" ? "Preparing file…" : "Download PowerPoint"}
+            </button>
+          </div>
         </div>
+        {saveStatus === "saved" && !saveError && (
+          <p className="text-sm text-sage">Saved.</p>
+        )}
+        {saveError && <p className="text-sm text-clay">{saveError}</p>}
         {exportError && <p className="text-sm text-clay">{exportError}</p>}
 
         <SlideEditor
