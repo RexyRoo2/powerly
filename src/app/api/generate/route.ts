@@ -129,7 +129,6 @@ export async function POST(req: Request) {
     message = await client.messages.create({
       model: MODEL,
       max_tokens: 8000,
-      temperature: 0.4,
       system: SYSTEM_PROMPT,
       tools: [GENERATE_TOOL],
       tool_choice: { type: "tool", name: "create_presentation" },
