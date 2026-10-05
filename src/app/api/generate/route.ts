@@ -136,20 +136,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("Anthropic request failed", err);
-    // Temporary: surface the real reason in the response so we can diagnose
-    // setup issues (bad key, no credits, wrong model) from the browser
-    // instead of digging through server logs. Narrow this back down once
-    // generation is confirmed working end to end.
-    const detail =
-      err instanceof Anthropic.APIError
-        ? `[${err.status}] ${err.name}: ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : "Unknown error";
-    return NextResponse.json(
-      { error: `The AI request failed. Try again in a moment. (${detail})` },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "The AI request failed. Try again in a moment." }, { status: 502 });
   }
 
   const toolUse = message.content.find(
