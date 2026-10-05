@@ -23,6 +23,8 @@ export default function PresentationEditor({
   const [instruction, setInstruction] = useState("");
   const [editStatus, setEditStatus] = useState<"idle" | "loading" | "error">("idle");
   const [editError, setEditError] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // While a pending edit is being previewed, every read/write goes through
   // it instead of the committed presentation — Apply promotes it, Discard
@@ -81,6 +83,36 @@ export default function PresentationEditor({
     setPendingEdit(null);
   }
 
+  async function handleExport() {
+    setExportStatus("loading");
+    setExportError(null);
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presentation: displayed }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Export failed.");
+      }
+      const blob = await res.blob();
+      const slug = displayed.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "presentation";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${slug}.pptx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportStatus("idle");
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed.");
+      setExportStatus("error");
+    }
+  }
+
   return (
     <div className="flex w-full max-w-6xl flex-col gap-4 md:flex-row md:gap-6">
       <aside className="flex shrink-0 gap-3 overflow-x-auto md:w-44 md:flex-col md:overflow-visible">
@@ -101,22 +133,32 @@ export default function PresentationEditor({
       </aside>
 
       <div className="flex flex-1 flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-xs tracking-wide text-cream/50 uppercase">Theme</span>
-          {Object.values(THEMES).map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTheme(t.id)}
-              className={`rounded-full px-3 py-1 text-xs transition ${
-                displayed.theme === t.id
-                  ? "bg-clay text-espresso"
-                  : "bg-umber text-cream/70 hover:text-cream"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-xs tracking-wide text-cream/50 uppercase">Theme</span>
+            {Object.values(THEMES).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                className={`rounded-full px-3 py-1 text-xs transition ${
+                  displayed.theme === t.id
+                    ? "bg-clay text-espresso"
+                    : "bg-umber text-cream/70 hover:text-cream"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleExport}
+            disabled={exportStatus === "loading"}
+            className="shrink-0 rounded-full border border-sage/50 px-3 py-1 text-xs text-sage transition hover:bg-sage/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {exportStatus === "loading" ? "Preparing file…" : "Download PowerPoint"}
+          </button>
         </div>
+        {exportError && <p className="text-sm text-clay">{exportError}</p>}
 
         <SlideEditor
           key={activeSlide.id}
