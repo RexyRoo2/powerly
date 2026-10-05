@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { PresentationSchema } from "@/lib/schema";
+import { TEXT_ELEMENT_JSON_SCHEMA, SHAPE_ELEMENT_JSON_SCHEMA, THEME_NAMES } from "@/lib/aiToolSchemas";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,7 @@ const GENERATE_TOOL: Anthropic.Tool = {
       title: { type: "string", description: "Short title for the whole presentation." },
       theme: {
         type: "string",
-        enum: ["minimal", "editorial", "futuristic", "academic", "playful"],
+        enum: THEME_NAMES,
         description: "Single best-fit visual theme for this deck's subject and tone.",
       },
       slides: {
@@ -35,42 +36,7 @@ const GENERATE_TOOL: Anthropic.Tool = {
             elements: {
               type: "array",
               items: {
-                anyOf: [
-                  {
-                    type: "object",
-                    description: "A text element.",
-                    properties: {
-                      type: { type: "string", const: "text" },
-                      content: { type: "string" },
-                      role: { type: "string", enum: ["title", "subtitle", "body", "caption", "label"] },
-                      fontFamily: { type: "string", enum: ["display", "body"] },
-                      fontSize: { type: "number", description: "Logical units; canvas is 720 tall. Titles ~48-64, body ~18-24, caption ~13-15." },
-                      fontWeight: { type: "number", enum: [400, 500, 600, 700] },
-                      color: { type: "string", enum: ["text", "accent", "muted"] },
-                      align: { type: "string", enum: ["left", "center", "right"] },
-                      x: { type: "number" },
-                      y: { type: "number" },
-                      width: { type: "number" },
-                      height: { type: "number" },
-                    },
-                    required: ["type", "content", "x", "y", "width", "height"],
-                  },
-                  {
-                    type: "object",
-                    description: "A simple shape — mostly used as a thin accent rule or a card background panel.",
-                    properties: {
-                      type: { type: "string", const: "shape" },
-                      shape: { type: "string", enum: ["rectangle", "ellipse"] },
-                      fill: { type: "string", enum: ["surface", "accent", "muted"] },
-                      radius: { type: "number" },
-                      x: { type: "number" },
-                      y: { type: "number" },
-                      width: { type: "number" },
-                      height: { type: "number" },
-                    },
-                    required: ["type", "x", "y", "width", "height"],
-                  },
-                ],
+                anyOf: [TEXT_ELEMENT_JSON_SCHEMA, SHAPE_ELEMENT_JSON_SCHEMA],
               },
             },
           },
