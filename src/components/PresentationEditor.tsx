@@ -16,10 +16,17 @@ export default function PresentationEditor({
   presentation: initial,
   presentationId = null,
   onSaved,
+  credits = null,
+  onCreditsChange,
+  onNeedCredits,
 }: {
   presentation: Presentation;
   presentationId?: string | null;
   onSaved?: (id: string, presentation: Presentation) => void;
+  /** null while the balance hasn't loaded yet. */
+  credits?: number | null;
+  onCreditsChange?: (credits: number) => void;
+  onNeedCredits?: () => void;
 }) {
   const [presentation, setPresentation] = useState(initial);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -118,6 +125,10 @@ export default function PresentationEditor({
   }
 
   async function handleExport() {
+    if (credits === 0) {
+      onNeedCredits?.();
+      return;
+    }
     setExportStatus("loading");
     setExportError(null);
     try {
@@ -128,6 +139,12 @@ export default function PresentationEditor({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
+        if (data?.code === "OUT_OF_CREDITS") {
+          onCreditsChange?.(0);
+          onNeedCredits?.();
+          setExportStatus("idle");
+          return;
+        }
         throw new Error(data?.error || "Export failed.");
       }
       const blob = await res.blob();
@@ -140,6 +157,9 @@ export default function PresentationEditor({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      // The export route already decremented server-side — mirror that
+      // here so the badge doesn't need a round-trip to stay accurate.
+      if (credits !== null) onCreditsChange?.(Math.max(0, credits - 1));
       setExportStatus("idle");
     } catch (err) {
       setExportError(err instanceof Error ? err.message : "Export failed.");
@@ -198,7 +218,11 @@ export default function PresentationEditor({
               disabled={exportStatus === "loading"}
               className="rounded-full border border-sage/50 px-3 py-1 text-xs text-sage transition hover:bg-sage/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {exportStatus === "loading" ? "Preparing file…" : "Download PowerPoint"}
+              {exportStatus === "loading"
+                ? "Preparing file…"
+                : credits === 0
+                  ? "Buy credits to export"
+                  : "Download PowerPoint"}
             </button>
           </div>
         </div>

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Presentation } from "@/lib/schema";
 import { createClient } from "@/lib/supabase/client";
 import PresentationWorkspace from "./PresentationWorkspace";
 import PresentationEditor from "./PresentationEditor";
+import CreditsBadge from "./CreditsBadge";
+import BuyCreditsModal from "./BuyCreditsModal";
 
 export type SavedPresentation = {
   id: string;
@@ -24,6 +26,7 @@ export default function Dashboard({
   initialPresentations: SavedPresentation[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [view, setView] = useState<"list" | "workspace">("list");
   const [presentations, setPresentations] = useState<SavedPresentation[]>(initialPresentations);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -31,6 +34,50 @@ export default function Dashboard({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [showBuyModal, setShowBuyModal] = useState(false);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/credits")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.credits === "number") setCredits(data.credits);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Stripe redirects back here after checkout — confirm the payment
+  // server-side (it's verified against Stripe directly, never trusted from
+  // the URL) and clean the query string either way so a refresh doesn't
+  // re-trigger it. confirm is idempotent, so even a double-fire is harmless.
+  useEffect(() => {
+    const checkout = searchParams.get("checkout");
+    const sessionId = searchParams.get("session_id");
+    if (checkout === "success" && sessionId) {
+      fetch("/api/checkout/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      })
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (ok && typeof data.credits === "number") {
+            setCredits(data.credits);
+            setCheckoutNotice(
+              data.alreadyCredited ? "You're all set — those credits are already on your account." : "Credits added — thanks!"
+            );
+          } else {
+            setCheckoutNotice(data?.error || "Couldn't confirm that payment. If you were charged, let me know.");
+          }
+        })
+        .catch(() => setCheckoutNotice("Couldn't confirm that payment. If you were charged, let me know."))
+        .finally(() => router.replace("/"));
+    } else if (checkout === "cancelled") {
+      router.replace("/");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -81,20 +128,37 @@ export default function Dashboard({
     }
   }
 
+  const buyModal = showBuyModal ? <BuyCreditsModal onClose={() => setShowBuyModal(false)} /> : null;
+  const notice = checkoutNotice ? (
+    <p className="text-sm text-sage">
+      {checkoutNotice}{" "}
+      <button onClick={() => setCheckoutNotice(null)} className="underline-offset-2 hover:underline">
+        Dismiss
+      </button>
+    </p>
+  ) : null;
+
   if (view === "workspace") {
     return (
       <div className="flex w-full max-w-6xl flex-col gap-4">
-        <button
-          onClick={backToList}
-          className="self-start text-sm text-cream/60 underline-offset-2 hover:text-cream hover:underline"
-        >
-          ← Back to my presentations
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={backToList}
+            className="text-sm text-cream/60 underline-offset-2 hover:text-cream hover:underline"
+          >
+            ← Back to my presentations
+          </button>
+          <CreditsBadge credits={credits} onBuyClick={() => setShowBuyModal(true)} />
+        </div>
+        {notice}
         {activePresentation ? (
           <PresentationEditor
             presentation={activePresentation}
             presentationId={activeId}
             onSaved={handleSaved}
+            credits={credits}
+            onCreditsChange={setCredits}
+            onNeedCredits={() => setShowBuyModal(true)}
           />
         ) : (
           <PresentationWorkspace
@@ -102,6 +166,7 @@ export default function Dashboard({
             onPresentationReady={setActivePresentation}
           />
         )}
+        {buyModal}
       </div>
     );
   }
@@ -119,13 +184,17 @@ export default function Dashboard({
         </button>
       </div>
 
-      <button
-        onClick={openNew}
-        className="self-start rounded-full bg-clay px-5 py-2 text-sm font-medium text-espresso transition"
-      >
-        + New presentation
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          onClick={openNew}
+          className="rounded-full bg-clay px-5 py-2 text-sm font-medium text-espresso transition"
+        >
+          + New presentation
+        </button>
+        <CreditsBadge credits={credits} onBuyClick={() => setShowBuyModal(true)} />
+      </div>
 
+      {notice}
       {deleteError && <p className="text-sm text-clay">{deleteError}</p>}
 
       {presentations.length === 0 ? (
@@ -170,6 +239,7 @@ export default function Dashboard({
           ))}
         </ul>
       )}
+      {buyModal}
     </div>
   );
 }
