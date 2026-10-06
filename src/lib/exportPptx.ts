@@ -1,26 +1,26 @@
 import PptxGenJS from "pptxgenjs";
 import type { Presentation, SlideElement, Theme } from "./schema";
-import { SLIDE_WIDTH, SLIDE_HEIGHT } from "./schema";
+import { SLIDE_WIDTH } from "./schema";
 import { THEMES, resolveColor } from "./themes";
+import { seriesColors } from "./chartColors";
 
 /**
- * Converts a Presentation into a real, editable .pptx file — text boxes and
- * shapes a student can still click into and move in PowerPoint/Keynote, not
- * a flattened image.
+ * Converts a Presentation into a real, editable .pptx file — text boxes,
+ * shapes, native charts and tables a student can still click into and edit
+ * in PowerPoint/Keynote, not a flattened image.
  *
  * Mirrors Slide.tsx element-for-element (same logical-unit canvas, same
  * color-role resolution, same element types supported) so what exports
- * matches what's on screen in the editor. Icon/chart/table/group elements
- * are skipped here exactly like the in-app renderer skips them — they
- * arrive together in a later milestone.
+ * matches what's on screen in the editor. Icon and group elements are
+ * skipped here exactly like the in-app renderer skips them — they arrive
+ * together in a later milestone.
  */
 
 // PowerPoint's built-in 16:9 widescreen layout is 13.333in x 7.5in, which is
 // exactly our 1280 x 720 canvas's aspect ratio — so one scale factor
 // converts logical units to inches on both axes.
 const LAYOUT_WIDTH_IN = 13.333;
-const LAYOUT_HEIGHT_IN = 7.5;
-const UNITS_TO_INCHES = LAYOUT_WIDTH_IN / SLIDE_WIDTH; // === LAYOUT_HEIGHT_IN / SLIDE_HEIGHT
+const UNITS_TO_INCHES = LAYOUT_WIDTH_IN / SLIDE_WIDTH; // === 7.5 / SLIDE_HEIGHT
 const POINTS_PER_INCH = 72;
 
 function toIn(unitsValue: number): number {
@@ -97,11 +97,12 @@ function addElement(pptxSlide: PptxGenJS.Slide, element: SlideElement, theme: Th
       break;
     }
     case "image": {
-      // Only usable when `src` is a real reachable URL or a data: URI —
-      // not yet reachable from the in-app editor, which has no image
-      // upload UI, but future-proofed here since the schema allows it.
+      // src is either a data: URI (uploaded images, resolved server-side
+      // before this ever runs) or a real URL — pptxgenjs needs a different
+      // field for each.
+      const isDataUri = element.src.startsWith("data:");
       pptxSlide.addImage({
-        path: element.src,
+        ...(isDataUri ? { data: element.src } : { path: element.src }),
         x: toIn(element.x),
         y: toIn(element.y),
         w: toIn(element.width),
@@ -109,8 +110,92 @@ function addElement(pptxSlide: PptxGenJS.Slide, element: SlideElement, theme: Th
       });
       break;
     }
-    // Icon, chart, table, and group elements arrive in a later milestone —
-    // same as Slide.tsx, silently skipped rather than breaking the export.
+    case "chart": {
+      const colors = seriesColors(theme, element.data.length).map((c) => c.replace("#", "").slice(0, 6));
+      pptxSlide.addChart(
+        element.chartType,
+        [
+          {
+            name: "Series 1",
+            labels: element.data.map((d) => d.label),
+            values: element.data.map((d) => d.value),
+          },
+        ],
+        {
+          x: toIn(element.x),
+          y: toIn(element.y),
+          w: toIn(element.width),
+          h: toIn(element.height),
+          chartColors: colors,
+          showLegend: element.chartType === "pie",
+          legendPos: "b",
+          legendColor: hex("text", theme),
+          showTitle: false,
+          catAxisLabelColor: hex("muted", theme),
+          catAxisLineColor: hex("muted", theme),
+          valAxisHidden: element.chartType !== "pie",
+          valGridLine: { style: "none" },
+          catGridLine: { style: "none" },
+          dataLabelColor: hex("text", theme),
+          chartColorsOpacity: 100,
+        }
+      );
+      break;
+    }
+    case "table": {
+      const [header, ...body] = element.rows;
+      const rows: PptxGenJS.TableRow[] = [];
+      if (header) {
+        rows.push(
+          header.map((cell) => ({
+            text: cell,
+            options: {
+              bold: true,
+              color: hex("accent", theme),
+              fontFace: fontFaceFor("body", theme),
+              fontSize: 11,
+              fill: { type: "none" },
+              border: [
+                { type: "none" },
+                { type: "none" },
+                { type: "solid", color: hex("muted", theme), pt: 0.75 },
+                { type: "none" },
+              ],
+            },
+          }))
+        );
+      }
+      for (const row of body) {
+        rows.push(
+          row.map((cell) => ({
+            text: cell,
+            options: {
+              color: hex("text", theme),
+              fontFace: fontFaceFor("body", theme),
+              fontSize: 11,
+              fill: { type: "none" },
+              border: [
+                { type: "none" },
+                { type: "none" },
+                { type: "solid", color: hex("muted", theme), pt: 0.5 },
+                { type: "none" },
+              ],
+            },
+          }))
+        );
+      }
+      pptxSlide.addTable(rows, {
+        x: toIn(element.x),
+        y: toIn(element.y),
+        w: toIn(element.width),
+        h: toIn(element.height),
+        autoPage: false,
+        valign: "middle",
+      });
+      break;
+    }
+    // Icon and group elements arrive in a later milestone — same as
+    // Slide.tsx, silently skipped rather than breaking the export.
     default:
       break;
   }

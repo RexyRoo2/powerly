@@ -6,6 +6,8 @@ import type { Slide as SlideType, SlideElement, Theme } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle, pixelDeltaToLogical } from "@/lib/coordinates";
 import { THEMES, resolveColor } from "@/lib/themes";
+import ChartGraphic from "./ChartGraphic";
+import TableGraphic from "./TableGraphic";
 
 type DragState = {
   id: string;
@@ -241,7 +243,19 @@ function EditableElement({
           }}
         />
       );
-    // Icon, chart, table, and group elements become editable in a later milestone.
+    case "chart":
+      return (
+        <div onPointerDown={onPointerDown} style={{ ...style, cursor: "grab", outline: selectionOutline, outlineOffset: 2 }}>
+          <ChartGraphic element={element} theme={theme} />
+        </div>
+      );
+    case "table":
+      return (
+        <div onPointerDown={onPointerDown} style={{ ...style, cursor: "grab", outline: selectionOutline, outlineOffset: 2 }}>
+          <TableGraphic element={element} theme={theme} />
+        </div>
+      );
+    // Icon and group elements become editable in a later milestone.
     default:
       return null;
   }

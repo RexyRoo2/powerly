@@ -2,6 +2,8 @@ import type { Slide as SlideType, SlideElement, Theme } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle } from "@/lib/coordinates";
 import { THEMES, resolveColor } from "@/lib/themes";
+import ChartGraphic from "./ChartGraphic";
+import TableGraphic from "./TableGraphic";
 
 function ElementRenderer({ element, theme }: { element: SlideElement; theme: Theme }) {
   const tokens = THEMES[theme];
@@ -64,7 +66,19 @@ function ElementRenderer({ element, theme }: { element: SlideElement; theme: The
           }}
         />
       );
-    // Icon, chart, table, and group elements arrive in a later milestone.
+    case "chart":
+      return (
+        <div style={boxStyle(element)}>
+          <ChartGraphic element={element} theme={theme} />
+        </div>
+      );
+    case "table":
+      return (
+        <div style={boxStyle(element)}>
+          <TableGraphic element={element} theme={theme} />
+        </div>
+      );
+    // Icon and group elements arrive in a later milestone.
     default:
       return null;
   }

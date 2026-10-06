@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { PresentationSchema } from "@/lib/schema";
-import { TEXT_ELEMENT_JSON_SCHEMA, SHAPE_ELEMENT_JSON_SCHEMA, THEME_NAMES } from "@/lib/aiToolSchemas";
+import {
+  TEXT_ELEMENT_JSON_SCHEMA,
+  SHAPE_ELEMENT_JSON_SCHEMA,
+  LINE_ELEMENT_JSON_SCHEMA,
+  CHART_ELEMENT_JSON_SCHEMA,
+  TABLE_ELEMENT_JSON_SCHEMA,
+  THEME_NAMES,
+} from "@/lib/aiToolSchemas";
 import { applyEditOperations, type RawEditOperation } from "@/lib/applyEdits";
 
 export const runtime = "nodejs";
@@ -21,12 +28,38 @@ const ELEMENT_PATCH_JSON_SCHEMA = {
     color: { type: "string", enum: ["text", "accent", "muted"] },
     align: { type: "string", enum: ["left", "center", "right"] },
     fill: { type: "string", enum: ["surface", "accent", "muted"] },
+    thickness: { type: "number", description: "For a line element." },
+    chartType: { type: "string", enum: ["bar", "line", "pie"], description: "For a chart element." },
+    data: {
+      type: "array",
+      description: "For a chart element — replaces the whole data set.",
+      items: {
+        type: "object",
+        properties: { label: { type: "string" }, value: { type: "number" } },
+        required: ["label", "value"],
+      },
+    },
+    rows: {
+      type: "array",
+      description: "For a table element — replaces the whole table, first row is the header.",
+      items: { type: "array", items: { type: "string" } },
+    },
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number" },
     height: { type: "number" },
   },
 } as const;
+
+// Image elements are deliberately left out here — the edit flow has no
+// channel for new uploads, so the AI has no valid image id it could use.
+const ADDABLE_ELEMENT_SCHEMAS = [
+  TEXT_ELEMENT_JSON_SCHEMA,
+  SHAPE_ELEMENT_JSON_SCHEMA,
+  LINE_ELEMENT_JSON_SCHEMA,
+  CHART_ELEMENT_JSON_SCHEMA,
+  TABLE_ELEMENT_JSON_SCHEMA,
+];
 
 const EDIT_TOOL: Anthropic.Tool = {
   name: "propose_edits",
@@ -58,7 +91,7 @@ const EDIT_TOOL: Anthropic.Tool = {
                 op: { type: "string", const: "add_element" },
                 summary: { type: "string" },
                 slideId: { type: "string" },
-                element: { anyOf: [TEXT_ELEMENT_JSON_SCHEMA, SHAPE_ELEMENT_JSON_SCHEMA] },
+                element: { anyOf: ADDABLE_ELEMENT_SCHEMAS },
               },
               required: ["op", "summary", "slideId", "element"],
             },
@@ -87,7 +120,7 @@ const EDIT_TOOL: Anthropic.Tool = {
                     background: { type: "string", enum: ["background", "surface"] },
                     elements: {
                       type: "array",
-                      items: { anyOf: [TEXT_ELEMENT_JSON_SCHEMA, SHAPE_ELEMENT_JSON_SCHEMA] },
+                      items: { anyOf: ADDABLE_ELEMENT_SCHEMAS },
                     },
                   },
                   required: ["elements"],
@@ -128,7 +161,7 @@ const SYSTEM_PROMPT = `You are Powerly's presentation editor assistant. You're g
 Rules:
 - Reference slides and elements ONLY by the exact ids present in the current state you were given. Never invent an id.
 - For update_element, only include the fields in "patch" that are actually changing — leave everything else out.
-- New elements follow the same rules as fresh generation: only "text" and "shape" types, positioned within the 1280 x 720 canvas, "color"/"fill" are roles ("text", "accent", "muted" for text; "surface", "accent", "muted" for shapes), fontFamily "display" only for a title or one big statement.
+- New elements follow the same rules as fresh generation: "text", "shape", "line", "chart" (bar/line/pie, real numeric data only), or "table" (first row is the header) — never "image" (there's no new image to use here, so never add one). Position within the 1280 x 720 canvas, "color"/"fill" are roles ("text", "accent", "muted" for text; "surface", "accent", "muted" for shapes), fontFamily "display" only for a title or one big statement.
 - If the instruction only makes sense for one slide ("make the title bigger"), only touch that slide.
 - Every operation needs a short, specific "summary" in plain English a student would understand, e.g. "Made the title on Slide 1 bigger" or "Added a new slide about photosynthesis stages" — this is shown to them before they accept the change.
 - If the instruction is genuinely ambiguous about which slide/element it means, make your best reasonable guess rather than asking — the student will see a preview and can discard it if it's wrong.`;
