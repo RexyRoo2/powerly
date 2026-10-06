@@ -178,13 +178,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "The AI didn't return a presentation. Try again." }, { status: 502 });
   }
 
-  const presentation = shapeIntoPresentation(toolUse.input, imagesById);
+  let presentation: ReturnType<typeof shapeIntoPresentation>;
+  try {
+    presentation = shapeIntoPresentation(toolUse.input, imagesById);
+  } catch (err) {
+    console.error("Failed to normalize the AI's presentation output", err);
+    return NextResponse.json(
+      { error: "The AI produced something malformed. Try again, or try shorter notes." },
+      { status: 502 }
+    );
+  }
 
   const parsed = PresentationSchema.safeParse(presentation);
   if (!parsed.success) {
     console.error("Generated presentation failed schema validation", parsed.error.flatten());
+    // Normalization above should catch almost everything — if it still
+    // fails, include a short diagnostic (not just a dead-end message) so
+    // it's actually fixable from a bug report instead of a guess.
+    const issues = parsed.error.issues
+      .slice(0, 4)
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join(" | ");
     return NextResponse.json(
-      { error: "The AI produced something malformed. Try again, or try shorter notes." },
+      { error: `The AI produced something malformed. Try again, or try shorter notes. [${issues}]` },
       { status: 502 }
     );
   }
@@ -192,13 +208,141 @@ export async function POST(req: Request) {
   return NextResponse.json({ presentation: parsed.data });
 }
 
+// ---------------------------------------------------------------------------
+// Normalization
+//
+// The tool-use JSON schema tells the model what's allowed, but it's not a
+// hard guarantee — an enum field can still come back slightly off (e.g.
+// "column" instead of "bar", a numeric value sent as a string, a chart with
+// only one data point). Previously a single element like that failed Zod
+// validation for the WHOLE deck. Instead we clamp/coerce anything
+// fixable here, and drop only the individual element if it's beyond
+// repair — so one odd element costs a slide element, not the whole deck.
+// ---------------------------------------------------------------------------
+
+const COLOR_ROLES = new Set(["background", "surface", "text", "accent", "muted"]);
+const TEXT_ROLES = new Set(["title", "subtitle", "body", "caption", "label"]);
+const FONT_FAMILIES = new Set(["display", "body"]);
+const FONT_WEIGHTS = new Set([400, 500, 600, 700]);
+const ALIGNS = new Set(["left", "center", "right"]);
+const SHAPE_KINDS = new Set(["rectangle", "ellipse", "line"]);
+const FITS = new Set(["cover", "contain"]);
+const CHART_TYPES = new Set(["bar", "line", "pie"]);
+
+function num(v: unknown, fallback: number): number {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function positiveNum(v: unknown, fallback: number): number {
+  const n = num(v, fallback);
+  return n > 0 ? n : fallback;
+}
+
+function pick<T extends string>(v: unknown, allowed: Set<T>, fallback: T): T {
+  return typeof v === "string" && allowed.has(v as T) ? (v as T) : fallback;
+}
+
+/**
+ * Normalizes one element's fields by type, coercing what's fixable.
+ * Returns null if the element is too broken to use (missing geometry, or an
+ * unrecognized/unresolvable type) — callers drop it rather than fail.
+ */
+function normalizeElement(
+  el: Record<string, unknown>,
+  imagesById: Map<string, string>
+): Record<string, unknown> | null {
+  if (!el || typeof el !== "object") return null;
+  const box = {
+    x: num(el.x, NaN),
+    y: num(el.y, NaN),
+    width: positiveNum(el.width, NaN),
+    height: positiveNum(el.height, NaN),
+  };
+  if (!Number.isFinite(box.x) || !Number.isFinite(box.y) || !Number.isFinite(box.width) || !Number.isFinite(box.height)) {
+    return null; // no usable position/size — can't place this on the canvas
+  }
+
+  switch (el.type) {
+    case "text":
+      if (typeof el.content !== "string" || !el.content.trim()) return null;
+      return {
+        ...box,
+        type: "text",
+        content: el.content,
+        role: pick(el.role, TEXT_ROLES, "body"),
+        fontFamily: pick(el.fontFamily, FONT_FAMILIES, "body"),
+        fontSize: positiveNum(el.fontSize, 18),
+        fontWeight: FONT_WEIGHTS.has(num(el.fontWeight, 400) as 400 | 500 | 600 | 700)
+          ? (num(el.fontWeight, 400) as 400 | 500 | 600 | 700)
+          : 400,
+        color: pick(el.color, COLOR_ROLES, "text"),
+        align: pick(el.align, ALIGNS, "left"),
+        lineHeight: positiveNum(el.lineHeight, 1.3),
+      };
+    case "shape":
+      return {
+        ...box,
+        type: "shape",
+        shape: pick(el.shape, SHAPE_KINDS, "rectangle"),
+        fill: pick(el.fill, COLOR_ROLES, "surface"),
+        radius: num(el.radius, 0),
+      };
+    case "line":
+      return {
+        ...box,
+        type: "line",
+        color: pick(el.color, COLOR_ROLES, "muted"),
+        thickness: positiveNum(el.thickness, 2),
+      };
+    case "image": {
+      const resolvedSrc = imagesById.get(String(el.src));
+      if (!resolvedSrc) return null; // unknown/invented image id — drop rather than ship a broken image
+      return {
+        ...box,
+        type: "image",
+        src: resolvedSrc,
+        alt: typeof el.alt === "string" ? el.alt : "",
+        fit: pick(el.fit, FITS, "cover"),
+        radius: num(el.radius, 0),
+      };
+    }
+    case "chart": {
+      const rawData = Array.isArray(el.data) ? el.data : [];
+      const data = rawData
+        .map((d) => {
+          if (!d || typeof d !== "object") return null;
+          const entry = d as Record<string, unknown>;
+          if (typeof entry.label !== "string") return null;
+          const value = num(entry.value, NaN);
+          if (!Number.isFinite(value)) return null;
+          return { label: entry.label, value };
+        })
+        .filter((d): d is { label: string; value: number } => d !== null);
+      if (data.length === 0) return null; // nothing real to chart
+      return {
+        ...box,
+        type: "chart",
+        chartType: pick(el.chartType, CHART_TYPES, "bar"),
+        data,
+      };
+    }
+    case "table": {
+      const rawRows = Array.isArray(el.rows) ? el.rows : [];
+      const rows = rawRows
+        .filter((row): row is unknown[] => Array.isArray(row))
+        .map((row) => row.map((cell) => (typeof cell === "string" ? cell : String(cell ?? ""))));
+      if (rows.length === 0) return null; // nothing to show
+      return { ...box, type: "table", rows };
+    }
+    default:
+      return null; // unrecognized/unsupported element type — drop rather than fail the deck
+  }
+}
+
 /**
  * The model never invents ids — we assign them deterministically here so
  * they're always unique, instead of trusting the model to not collide.
- * Image elements are a special case: the model may only ever reference an
- * uploaded image by the id it was given, never a real URL, so any "image"
- * element here gets its src swapped for the actual uploaded data: URI — or
- * dropped entirely if it references an id that was never uploaded.
  */
 function shapeIntoPresentation(input: unknown, imagesById: Map<string, string>) {
   const raw = input as {
@@ -211,30 +355,29 @@ function shapeIntoPresentation(input: unknown, imagesById: Map<string, string>) 
     }>;
   };
 
-  const slides = (raw.slides ?? []).map((slide, slideIndex) => {
+  const slidesInput = Array.isArray(raw.slides) ? raw.slides : [];
+  const slides = slidesInput.map((slide, slideIndex) => {
     const slideId = `slide-${slideIndex + 1}`;
-    const elements = (slide.elements ?? [])
+    const elementsInput = Array.isArray(slide?.elements) ? slide.elements : [];
+    const elements = elementsInput
       .map((el, elIndex): Record<string, unknown> | null => {
-        if (el.type === "image") {
-          const resolvedSrc = imagesById.get(String(el.src));
-          if (!resolvedSrc) return null; // unknown/invented image id — drop rather than ship a broken image
-          return { ...el, src: resolvedSrc, id: `${slideId}-el-${elIndex + 1}` };
-        }
-        return { ...el, id: `${slideId}-el-${elIndex + 1}` };
+        const normalized = normalizeElement(el, imagesById);
+        if (!normalized) return null;
+        return { ...normalized, id: `${slideId}-el-${elIndex + 1}` };
       })
       .filter((el): el is Record<string, unknown> => el !== null);
     return {
       id: slideId,
       layout: slide.layout ?? "blank",
-      background: slide.background ?? "background",
+      background: pick(slide.background, new Set(["background", "surface"]), "background"),
       elements,
     };
   });
 
   return {
     id: `gen-${Date.now()}`,
-    title: raw.title ?? "Untitled presentation",
-    theme: raw.theme ?? "academic",
+    title: typeof raw.title === "string" && raw.title.trim() ? raw.title : "Untitled presentation",
+    theme: pick(raw.theme, new Set(THEME_NAMES), "academic"),
     slides,
   };
 }
