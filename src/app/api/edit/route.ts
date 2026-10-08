@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@/lib/supabase/server";
 import { PresentationSchema } from "@/lib/schema";
 import {
   TEXT_ELEMENT_JSON_SCHEMA,
@@ -166,7 +167,23 @@ Rules:
 - Every operation needs a short, specific "summary" in plain English a student would understand, e.g. "Made the title on Slide 1 bigger" or "Added a new slide about photosynthesis stages" — this is shown to them before they accept the change.
 - If the instruction is genuinely ambiguous about which slide/element it means, make your best reasonable guess rather than asking — the student will see a preview and can discard it if it's wrong.`;
 
+// Shared budget across /api/generate AND /api/edit (same underlying
+// counter, see that route) — generous for a real editing session, capped
+// against runaway Anthropic API cost.
+const AI_CALL_LIMIT = 30;
+const AI_CALL_WINDOW_SECONDS = 60 * 60; // 1 hour
+
 export async function POST(req: Request) {
+  // Calls the paid Anthropic API — must be gated behind a real signed-in
+  // user (this route has no other access control in front of it).
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Sign in to edit a presentation." }, { status: 401 });
+  }
+
   let body: { presentation?: unknown; instruction?: string };
   try {
     body = await req.json();
@@ -188,6 +205,21 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: `That's a long instruction — trim it to under ${MAX_INSTRUCTION_LENGTH.toLocaleString()} characters.` },
       { status: 400 }
+    );
+  }
+
+  const { data: withinLimit, error: rateLimitError } = await supabase.rpc("check_ai_rate_limit", {
+    p_limit: AI_CALL_LIMIT,
+    p_window_seconds: AI_CALL_WINDOW_SECONDS,
+  });
+  if (rateLimitError) {
+    console.error("Rate limit check failed", rateLimitError);
+    return NextResponse.json({ error: "Something went wrong. Try again in a moment." }, { status: 500 });
+  }
+  if (!withinLimit) {
+    return NextResponse.json(
+      { error: "You've hit the AI-edit limit for now — try again in a little while." },
+      { status: 429 }
     );
   }
 

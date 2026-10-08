@@ -9,6 +9,7 @@ import { Presentation, PresentationSchema, SLIDE_WIDTH } from "./schema";
 const raw = {
   id: "example-presentation",
   title: "Causes of World War I",
+  subject: "History",
   theme: "academic",
   slides: [
     {

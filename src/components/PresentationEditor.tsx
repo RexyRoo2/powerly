@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Presentation, Slide as SlideType, Theme } from "@/lib/schema";
 import { PresentationSchema } from "@/lib/schema";
 import SlideEditor from "./SlideEditor";
@@ -19,6 +19,7 @@ export default function PresentationEditor({
   credits = null,
   onCreditsChange,
   onNeedCredits,
+  onDirtyChange,
 }: {
   presentation: Presentation;
   presentationId?: string | null;
@@ -27,6 +28,8 @@ export default function PresentationEditor({
   credits?: number | null;
   onCreditsChange?: (credits: number) => void;
   onNeedCredits?: () => void;
+  /** Lets a parent confirm before navigating away in-app (no real page unload to warn on). */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [presentation, setPresentation] = useState(initial);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -39,6 +42,24 @@ export default function PresentationEditor({
   const [savedId, setSavedId] = useState<string | null>(presentationId);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  // Warn before closing/navigating away with edits that were never saved —
+  // there's no autosave, so this is the only safety net against losing work.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [dirty]);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
 
   // While a pending edit is being previewed, every read/write goes through
   // it instead of the committed presentation — Apply promotes it, Discard
@@ -53,6 +74,7 @@ export default function PresentationEditor({
     } else {
       setPresentation(updater);
       setSaveStatus("idle"); // the committed deck just changed — "Saved" no longer applies
+      setDirty(true);
     }
   };
 
@@ -91,6 +113,7 @@ export default function PresentationEditor({
     if (!pendingEdit) return;
     setPresentation(pendingEdit.presentation);
     setSaveStatus("idle"); // the committed deck just changed — "Saved" no longer applies
+    setDirty(true);
     setPendingEdit(null);
     setInstruction("");
   }
@@ -117,6 +140,7 @@ export default function PresentationEditor({
       }
       setSavedId(data.id);
       setSaveStatus("saved");
+      setDirty(false);
       onSaved?.(data.id, presentation);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Couldn't save your presentation.");
@@ -272,7 +296,8 @@ export default function PresentationEditor({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && instruction.trim() && editStatus !== "loading") handleAskAI();
                 }}
-                placeholder="Ask AI to change something — e.g. &quot;make the title on slide 1 bigger&quot;"
+                placeholder="Ask AI to change something…"
+                title='e.g. "make the title on slide 1 bigger"'
                 disabled={editStatus === "loading"}
                 className="flex-1 rounded-full border border-umber bg-umber/40 px-4 py-2 text-sm text-cream placeholder:text-cream/40 focus:border-clay focus:outline-none"
               />

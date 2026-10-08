@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Slide as SlideType, SlideElement, Theme } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
@@ -49,6 +49,27 @@ export default function SlideEditor({
     });
   };
 
+  const deleteElement = (id: string) => {
+    onChange({ ...slide, elements: slide.elements.filter((el) => el.id !== id) });
+    setSelectedId(null);
+  };
+
+  // Delete/Backspace removes the selected element — but only when nothing
+  // is actively being typed into (editingId tracks that separately, and the
+  // in-place text textarea has its own onKeyDown that never reaches here).
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!selectedId || editingId) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        deleteElement(selectedId);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, editingId, slide]);
+
   const handleElementPointerDown = (e: ReactPointerEvent, element: SlideElement) => {
     if (editingId === element.id) return; // typing — don't start a drag
     e.stopPropagation();
@@ -80,39 +101,65 @@ export default function SlideEditor({
     dragState.current = null;
   };
 
+  const selectedElement = slide.elements.find((el) => el.id === selectedId) ?? null;
+
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full select-none overflow-hidden rounded-2xl shadow-2xl"
-      style={{
-        aspectRatio: `${SLIDE_WIDTH} / ${SLIDE_HEIGHT}`,
-        backgroundColor: resolveColor(slide.background, theme),
-        containerType: "size",
-      }}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerDown={() => {
-        setSelectedId(null);
-        setEditingId(null);
-      }}
-    >
-      {slide.elements.map((element) => (
-        <EditableElement
-          key={element.id}
-          element={element}
-          theme={theme}
-          selected={selectedId === element.id}
-          editing={editingId === element.id}
-          onPointerDown={(e) => handleElementPointerDown(e, element)}
-          onDoubleClick={() => {
-            if (element.type === "text") setEditingId(element.id);
-          }}
-          onCommitText={(content) => {
-            updateElement(element.id, { content });
-            setEditingId(null);
-          }}
-        />
-      ))}
+    <div className="flex flex-col gap-2">
+      <div
+        ref={containerRef}
+        className="relative w-full select-none overflow-hidden rounded-2xl shadow-2xl"
+        style={{
+          aspectRatio: `${SLIDE_WIDTH} / ${SLIDE_HEIGHT}`,
+          backgroundColor: resolveColor(slide.background, theme),
+          containerType: "size",
+        }}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerDown={() => {
+          setSelectedId(null);
+          setEditingId(null);
+        }}
+      >
+        {slide.elements.map((element) => (
+          <EditableElement
+            key={element.id}
+            element={element}
+            theme={theme}
+            selected={selectedId === element.id}
+            editing={editingId === element.id}
+            onPointerDown={(e) => handleElementPointerDown(e, element)}
+            onDoubleClick={() => {
+              if (element.type === "text") setEditingId(element.id);
+            }}
+            onCommitText={(content) => {
+              updateElement(element.id, { content });
+              setEditingId(null);
+            }}
+          />
+        ))}
+        {selectedElement && !editingId && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => deleteElement(selectedElement.id)}
+            title="Delete this element"
+            aria-label="Delete selected element"
+            style={{
+              position: "absolute",
+              left: `calc(${(selectedElement.x / SLIDE_WIDTH) * 100}% + ${
+                (selectedElement.width / SLIDE_WIDTH) * 100
+              }% - 12px)`,
+              top: `calc(${(selectedElement.y / SLIDE_HEIGHT) * 100}% - 12px)`,
+            }}
+            className="z-10 flex h-6 w-6 items-center justify-center rounded-full bg-clay text-xs text-espresso shadow-md hover:brightness-110"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-cream/40">
+        Click to select · drag to move · double-click text to edit · Delete key (or the × button) to remove
+      </p>
     </div>
   );
 }

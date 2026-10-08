@@ -4,8 +4,8 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Mode = "sign-in" | "sign-up";
-type Status = "idle" | "loading" | "error" | "check-email";
+type Mode = "sign-in" | "sign-up" | "forgot";
+type Status = "idle" | "loading" | "error" | "check-email" | "reset-sent";
 
 export default function AuthGate() {
   const router = useRouter();
@@ -20,6 +20,19 @@ export default function AuthGate() {
     setStatus("loading");
     setError(null);
     const supabase = createClient();
+
+    if (mode === "forgot") {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (resetError) {
+        setError(resetError.message);
+        setStatus("error");
+        return;
+      }
+      setStatus("reset-sent");
+      return;
+    }
 
     if (mode === "sign-up") {
       const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
@@ -65,6 +78,62 @@ export default function AuthGate() {
     );
   }
 
+  if (status === "reset-sent") {
+    return (
+      <div className="flex w-full max-w-sm flex-col items-center gap-3 text-center">
+        <p className="text-sm text-cream">
+          If an account exists for {email}, a password reset link is on its way — check your email.
+        </p>
+        <button
+          onClick={() => {
+            setStatus("idle");
+            setMode("sign-in");
+          }}
+          className="text-sm text-cream/60 underline-offset-2 hover:text-cream hover:underline"
+        >
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-3">
+        <p className="text-sm text-cream/70">
+          Enter your email and we&apos;ll send you a link to set a new password.
+        </p>
+        <input
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          className="w-full rounded-xl border border-umber bg-umber/40 px-4 py-2 text-sm text-cream placeholder:text-cream/40 focus:border-clay focus:outline-none"
+        />
+        {error && <p className="text-sm text-clay">{error}</p>}
+        <button
+          type="submit"
+          disabled={status === "loading"}
+          className="rounded-full bg-clay px-5 py-2 text-sm font-medium text-espresso transition disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {status === "loading" ? "…" : "Send reset link"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode("sign-in");
+            setError(null);
+          }}
+          className="text-sm text-cream/60 underline-offset-2 hover:text-cream hover:underline"
+        >
+          Back to sign in
+        </button>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-3">
       <input
@@ -94,16 +163,30 @@ export default function AuthGate() {
       >
         {status === "loading" ? "…" : mode === "sign-up" ? "Create account" : "Sign in"}
       </button>
-      <button
-        type="button"
-        onClick={() => {
-          setMode(mode === "sign-up" ? "sign-in" : "sign-up");
-          setError(null);
-        }}
-        className="text-sm text-cream/60 underline-offset-2 hover:text-cream hover:underline"
-      >
-        {mode === "sign-up" ? "Already have an account? Sign in" : "New here? Create an account"}
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => {
+            setMode(mode === "sign-up" ? "sign-in" : "sign-up");
+            setError(null);
+          }}
+          className="text-sm text-cream/60 underline-offset-2 hover:text-cream hover:underline"
+        >
+          {mode === "sign-up" ? "Already have an account? Sign in" : "New here? Create an account"}
+        </button>
+        {mode === "sign-in" && (
+          <button
+            type="button"
+            onClick={() => {
+              setMode("forgot");
+              setError(null);
+            }}
+            className="text-sm text-cream/40 underline-offset-2 hover:text-cream/70 hover:underline"
+          >
+            Forgot password?
+          </button>
+        )}
+      </div>
     </form>
   );
 }

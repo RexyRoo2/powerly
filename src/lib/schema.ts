@@ -152,6 +152,8 @@ export type Slide = z.infer<typeof SlideSchema>;
 export const PresentationSchema = z.object({
   id: z.string(),
   title: z.string(),
+  /** Short 1-3 word label (e.g. "Biology", "Debate club") shown on deck cards in the dashboard. */
+  subject: z.string().trim().min(1).default("General"),
   theme: ThemeSchema.default("academic"),
   slides: z.array(SlideSchema),
 });

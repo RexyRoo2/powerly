@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@/lib/supabase/server";
 import { PresentationSchema } from "@/lib/schema";
 import {
   TEXT_ELEMENT_JSON_SCHEMA,
@@ -41,6 +42,10 @@ const GENERATE_TOOL: Anthropic.Tool = {
     type: "object",
     properties: {
       title: { type: "string", description: "Short title for the whole presentation." },
+      subject: {
+        type: "string",
+        description: "Short 1-3 word subject/category label for this deck, e.g. 'Biology', 'History', 'Debate club'. Shown on the deck's card in the student's dashboard.",
+      },
       theme: {
         type: "string",
         enum: THEME_NAMES,
@@ -64,7 +69,7 @@ const GENERATE_TOOL: Anthropic.Tool = {
         },
       },
     },
-    required: ["title", "theme", "slides"],
+    required: ["title", "subject", "theme", "slides"],
   },
 };
 
@@ -81,9 +86,28 @@ Given the student's material, call create_presentation. Rules:
 - Use a "chart" only for real numeric data present in the material — never invent numbers. Use a "table" only for real structured info (a comparison, a list of terms, stats) — keep it small enough to read on a slide.
 - Vary layout across slides — don't repeat "title + one paragraph" every time. Mix in: a title with 2-3 short supporting blocks spaced apart, a big single statistic or short phrase centered, a simple two-column split, a chart with a short takeaway beside it, a comparison table. A thin "line" or thin "shape" rectangle (height 4-6, fill "accent") under a title makes a nice divider — use it occasionally, not on every slide.
 - Pick ONE "theme" for the whole deck based on the subject's tone: academic or editorial for history/humanities, minimal or futuristic for science/tech/math, playful for something lighter or creative. Don't ask — just choose the best fit.
-- Give the whole presentation a short, clear "title".`;
+- Give the whole presentation a short, clear "title", and a short "subject" label (1-3 words, e.g. "Biology", "History", "Debate club") that best categorizes it.`;
+
+// Shared budget across /api/generate AND /api/edit (same underlying
+// counter) — generous enough for a real study session (generate a deck,
+// then ask the AI to tweak it a dozen times), capped enough that one
+// account can't quietly run up the Anthropic bill.
+const AI_CALL_LIMIT = 30;
+const AI_CALL_WINDOW_SECONDS = 60 * 60; // 1 hour
 
 export async function POST(req: Request) {
+  // This calls the paid Anthropic API, so it has to be gated behind a real
+  // signed-in user — reachable directly (no proxy/middleware enforces
+  // this), it was previously open to anyone on the internet, logged in or
+  // not.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Sign in to generate a presentation." }, { status: 401 });
+  }
+
   let body: { notes?: string; images?: UploadedImage[] };
   try {
     body = await req.json();
@@ -119,6 +143,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "One of the attached images is too large." }, { status: 400 });
     }
     imagesById.set(img.id, `data:${img.mediaType};base64,${img.data}`);
+  }
+
+  const { data: withinLimit, error: rateLimitError } = await supabase.rpc("check_ai_rate_limit", {
+    p_limit: AI_CALL_LIMIT,
+    p_window_seconds: AI_CALL_WINDOW_SECONDS,
+  });
+  if (rateLimitError) {
+    console.error("Rate limit check failed", rateLimitError);
+    return NextResponse.json({ error: "Something went wrong. Try again in a moment." }, { status: 500 });
+  }
+  if (!withinLimit) {
+    return NextResponse.json(
+      { error: "You've hit the generation limit for now — try again in a little while." },
+      { status: 429 }
+    );
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -347,6 +386,7 @@ function normalizeElement(
 function shapeIntoPresentation(input: unknown, imagesById: Map<string, string>) {
   const raw = input as {
     title?: string;
+    subject?: string;
     theme?: string;
     slides?: Array<{
       layout?: string;
@@ -377,6 +417,7 @@ function shapeIntoPresentation(input: unknown, imagesById: Map<string, string>) 
   return {
     id: `gen-${Date.now()}`,
     title: typeof raw.title === "string" && raw.title.trim() ? raw.title : "Untitled presentation",
+    subject: typeof raw.subject === "string" && raw.subject.trim() ? raw.subject.trim() : "General",
     theme: pick(raw.theme, new Set(THEME_NAMES), "academic"),
     slides,
   };

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { CREDIT_PACKS, formatPrice } from "@/lib/creditPacks";
+import { useBuyCredits } from "@/lib/useBuyCredits";
 
 /**
  * Checkout is Stripe's own hosted page — buying redirects the whole tab
@@ -9,26 +9,7 @@ import { CREDIT_PACKS, formatPrice } from "@/lib/creditPacks";
  * just handing off to Stripe once a pack is picked.
  */
 export default function BuyCreditsModal({ onClose }: { onClose: () => void }) {
-  const [loadingPackId, setLoadingPackId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function buy(packId: string) {
-    setLoadingPackId(packId);
-    setError(null);
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packId }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.url) throw new Error(data?.error || "Couldn't start checkout.");
-      window.location.assign(data.url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't start checkout.");
-      setLoadingPackId(null);
-    }
-  }
+  const { buy, loadingPackId, error } = useBuyCredits();
 
   return (
     <div
