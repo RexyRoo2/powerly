@@ -6,6 +6,21 @@
  * elements are still deferred to a later milestone.
  */
 
+// Every element schema below accepts an optional "slot" field. When the
+// slide's layout is a named template (see layoutTemplates.ts), set "slot"
+// to one of that template's slot names and OMIT x/y/width/height entirely —
+// the server resolves the real geometry from the template, so the model
+// never has to guess pixel positions for anything that has a slot. Only on
+// layout "custom" should x/y/width/height be supplied directly.
+
+const SLOT_FIELD = {
+  slot: {
+    type: "string",
+    description:
+      "Name of the slot (from the chosen layout template) this element fills, e.g. \"title\", \"body\", \"statAValue\". Omit x/y/width/height when slot is set — geometry comes from the template. Leave slot unset only on layout \"custom\".",
+  },
+} as const;
+
 export const TEXT_ELEMENT_JSON_SCHEMA = {
   type: "object",
   description: "A text element.",
@@ -16,11 +31,13 @@ export const TEXT_ELEMENT_JSON_SCHEMA = {
     fontFamily: { type: "string", enum: ["display", "body"] },
     fontSize: {
       type: "number",
-      description: "Logical units; canvas is 720 tall. Titles ~48-64, body ~18-24, caption ~13-15.",
+      description:
+        "Logical units; canvas is 720 tall. Only meaningful on layout \"custom\" — a slotted element uses its slot's suggested size unless you deliberately want something else.",
     },
     fontWeight: { type: "number", enum: [400, 500, 600, 700] },
     color: { type: "string", enum: ["text", "accent", "muted"] },
     align: { type: "string", enum: ["left", "center", "right"] },
+    ...SLOT_FIELD,
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number" },
@@ -37,6 +54,7 @@ export const SHAPE_ELEMENT_JSON_SCHEMA = {
     shape: { type: "string", enum: ["rectangle", "ellipse"] },
     fill: { type: "string", enum: ["surface", "accent", "muted"] },
     radius: { type: "number" },
+    ...SLOT_FIELD,
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number" },
@@ -52,6 +70,7 @@ export const LINE_ELEMENT_JSON_SCHEMA = {
     type: { type: "string", const: "line" },
     color: { type: "string", enum: ["text", "accent", "muted"] },
     thickness: { type: "number", description: "Logical units, typically 2-6." },
+    ...SLOT_FIELD,
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number" },
@@ -70,6 +89,7 @@ export const IMAGE_ELEMENT_JSON_SCHEMA = {
     alt: { type: "string" },
     fit: { type: "string", enum: ["cover", "contain"] },
     radius: { type: "number" },
+    ...SLOT_FIELD,
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number" },
@@ -98,6 +118,7 @@ export const CHART_ELEMENT_JSON_SCHEMA = {
         required: ["label", "value"],
       },
     },
+    ...SLOT_FIELD,
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number" },
@@ -121,6 +142,7 @@ export const TABLE_ELEMENT_JSON_SCHEMA = {
         items: { type: "string" },
       },
     },
+    ...SLOT_FIELD,
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number" },
@@ -128,5 +150,19 @@ export const TABLE_ELEMENT_JSON_SCHEMA = {
   },
   required: ["type", "rows", "x", "y", "width", "height"],
 } as const;
+
+/**
+ * Derives a "slottable" variant of an element schema for api/generate only:
+ * x/y/width/height become optional (the model omits them when "slot" is
+ * set, and the server resolves real geometry from the chosen layout
+ * template). api/edit keeps using the schemas above as-is, unchanged,
+ * since it has no layout template to resolve against.
+ */
+export function withOptionalGeometry<T extends { required: readonly string[] }>(
+  schema: T
+): Omit<T, "required"> & { required: string[] } {
+  const required = schema.required.filter((f) => !["x", "y", "width", "height"].includes(f));
+  return { ...schema, required };
+}
 
 export const THEME_NAMES = ["minimal", "editorial", "futuristic", "academic", "playful"] as const;
