@@ -95,7 +95,7 @@ Every slide picks exactly one "layout" from this fixed list. Each layout has a n
 ${LAYOUT_DOCS}
 Only use layout "custom" when a slide genuinely doesn't fit any template above (e.g. a full-bleed photo). On "custom" (and only there), supply x/y/width/height yourself: stay inside the 1280 x 720 canvas, leave real margins (60-100 units from the edges), and don't let elements overlap.
 
-Some layouts have optional slots (e.g. "eyebrow", "footnote", "subtitle") — skip them when they'd add nothing; don't force content into every optional slot just because it exists.
+Some layouts have optional slots (e.g. "eyebrow", "footnote", "subtitle") — skip them when they'd add nothing; don't force content into every optional slot just because it exists. When you do use an "eyebrow" label, write it in normal sentence case ("Why it matters"), NOT tracked-out ALL CAPS, and don't join two words with a middle dot ("·") — both are generic AI-slide tells, not a style choice. Vary whether slides even have an eyebrow at all; using one on every single slide is itself a tell.
 
 - Produce between 4 and 10 slides depending on how much material there is. Start with layout "title". End with layout "closing" (a summary or key takeaway drawn from the material — never invent a quote or statistic that isn't in it).
 - Every text element needs a "role" (title, subtitle, body, caption, or label) — a slotted element's slot already suggests one, but you can override it for a reason. Pick "color": "text" for normal copy, "accent" for the one most important number or phrase per slide (use it sparingly, 1-2 elements per slide at most), "muted" for captions and labels.
