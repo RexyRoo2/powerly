@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Presentation, Slide as SlideType, Theme } from "@/lib/schema";
+import type { Presentation, Slide as SlideType } from "@/lib/schema";
 import { PresentationSchema } from "@/lib/schema";
 import SlideEditor from "./SlideEditor";
 import Slide from "./Slide";
-import { THEMES } from "@/lib/themes";
 
 type PendingEdit = {
   presentation: Presentation;
@@ -80,10 +79,6 @@ export default function PresentationEditor({
 
   const updateSlide = (index: number, slide: SlideType) => {
     mutateDisplayed((p) => ({ ...p, slides: p.slides.map((s, i) => (i === index ? slide : s)) }));
-  };
-
-  const setTheme = (theme: Theme) => {
-    mutateDisplayed((p) => ({ ...p, theme }));
   };
 
   async function handleAskAI() {
@@ -213,20 +208,12 @@ export default function PresentationEditor({
       <div className="flex flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-xs tracking-wide text-cream/50 uppercase">Theme</span>
-            {Object.values(THEMES).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                className={`rounded-full px-3 py-1 text-xs transition ${
-                  displayed.theme === t.id
-                    ? "bg-clay text-espresso"
-                    : "bg-umber text-cream/70 hover:text-cream"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+            {/* Decks no longer pick from a fixed theme list — this deck's
+                palette was generated for its own subject. "Ask AI" below can
+                still propose a new one (e.g. "make it more autumn-colored"). */}
+            <span className="rounded-full bg-umber/40 px-3 py-1 text-xs text-cream/60" title="This deck's own generated color palette">
+              {displayed.theme.name}
+            </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button

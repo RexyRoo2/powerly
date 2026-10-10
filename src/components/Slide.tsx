@@ -1,16 +1,14 @@
-import type { Slide as SlideType, SlideElement, Theme } from "@/lib/schema";
+import type { Slide as SlideType, SlideElement, Palette } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle } from "@/lib/coordinates";
-import { THEMES, resolveColor } from "@/lib/themes";
+import { resolveColor, fontFaceVar } from "@/lib/themes";
 import ChartGraphic from "./ChartGraphic";
 import TableGraphic from "./TableGraphic";
 
-function ElementRenderer({ element, theme }: { element: SlideElement; theme: Theme }) {
-  const tokens = THEMES[theme];
-
+function ElementRenderer({ element, theme }: { element: SlideElement; theme: Palette }) {
   switch (element.type) {
     case "text": {
-      const fontFamilyVar = element.fontFamily === "display" ? tokens.fontDisplay : tokens.fontBody;
+      const fontFamilyVar = fontFaceVar(element.fontFamily === "display" ? theme.fontDisplay : theme.fontBody);
       return (
         <div
           style={{
@@ -84,7 +82,7 @@ function ElementRenderer({ element, theme }: { element: SlideElement; theme: The
   }
 }
 
-export default function Slide({ slide, theme }: { slide: SlideType; theme: Theme }) {
+export default function Slide({ slide, theme }: { slide: SlideType; theme: Palette }) {
   return (
     <div
       className="relative w-full overflow-hidden rounded-2xl shadow-2xl"

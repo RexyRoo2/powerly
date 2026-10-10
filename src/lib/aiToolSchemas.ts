@@ -165,4 +165,38 @@ export function withOptionalGeometry<T extends { required: readonly string[] }>(
   return { ...schema, required };
 }
 
-export const THEME_NAMES = ["minimal", "editorial", "futuristic", "academic", "playful"] as const;
+export const FONT_CHOICES = ["inter", "instrument-serif", "outfit"] as const;
+
+/**
+ * Shared JSON-schema fragment for a deck's own bespoke palette — used by
+ * api/generate (the initial deck) and api/edit's "change_palette" op
+ * (re-proposing a new palette for an existing deck). There's no fixed
+ * theme list anymore; every deck gets a palette designed for ITS subject.
+ */
+export const PALETTE_JSON_SCHEMA = {
+  type: "object",
+  description:
+    "This deck's own bespoke color palette and fonts — designed fresh for THIS subject, never reused from a fixed list. Ground the hues in the subject itself (an oceans topic should read as blue; a fire/energy topic could read as warm red/orange; plant biology could read green; space could read deep indigo; a neutral humanities topic can stay close to ink-on-paper tones) so different decks actually look different from each other.",
+  properties: {
+    name: {
+      type: "string",
+      description: "A short, evocative 2-4 word name for this palette, e.g. \"Ocean Depths\", \"Autumn Harvest\". Shown on the deck's card.",
+    },
+    colors: {
+      type: "object",
+      description:
+        "Exactly one dark color, one light color, and 1-2 accents, as 6-digit hex strings (#RRGGBB). Pick a clearly dark OR clearly light pair for background/surface (surface a touch lighter or darker than background, for card panels) — never a mid-gray pair. \"text\" must read clearly against \"background\" (strong contrast: near-white text on a dark background, near-black text on a light one — this is checked and corrected automatically if it's too close, but aim to get it right). \"accent\" is the one standout color, used sparingly for emphasis. \"muted\" is a dimmer tone for captions/labels/dividers, still legible on \"background\".",
+      properties: {
+        background: { type: "string", description: "6-digit hex, e.g. \"#102A3E\"." },
+        surface: { type: "string", description: "6-digit hex. Card/panel background — close to background, a touch lighter or darker." },
+        text: { type: "string", description: "6-digit hex. Main copy color — must contrast clearly against background." },
+        accent: { type: "string", description: "6-digit hex. The one standout color, used sparingly (1-2 elements per slide at most)." },
+        muted: { type: "string", description: "6-digit hex. For captions/labels/dividers — dimmer than text, still legible on background." },
+      },
+      required: ["background", "surface", "text", "accent", "muted"],
+    },
+    fontDisplay: { type: "string", enum: FONT_CHOICES, description: "Font for titles and big standalone statements." },
+    fontBody: { type: "string", enum: FONT_CHOICES, description: "Font for body/caption/label text. Can match fontDisplay if that suits the deck." },
+  },
+  required: ["name", "colors", "fontDisplay", "fontBody"],
+} as const;

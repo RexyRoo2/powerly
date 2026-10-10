@@ -6,11 +6,13 @@ import {
   IMAGE_ELEMENT_JSON_SCHEMA,
   CHART_ELEMENT_JSON_SCHEMA,
   TABLE_ELEMENT_JSON_SCHEMA,
-  THEME_NAMES,
+  PALETTE_JSON_SCHEMA,
   withOptionalGeometry,
 } from "./aiToolSchemas";
 import { LAYOUT_NAMES, LAYOUT_TEMPLATES, getSlot, isKnownLayout, type Slot } from "./layoutTemplates";
 import { fitTextToBox, type FitRole, type FitFontFamily } from "./textFit";
+import { normalizePalette } from "./paletteFit";
+import { DEFAULT_PALETTE } from "./themes";
 
 /**
  * Pure presentation-generation logic for /api/generate — the AI tool
@@ -53,11 +55,7 @@ export const GENERATE_TOOL: Anthropic.Tool = {
         type: "string",
         description: "Short 1-3 word subject/category label for this deck, e.g. 'Biology', 'History', 'Debate club'. Shown on the deck's card in the student's dashboard.",
       },
-      theme: {
-        type: "string",
-        enum: THEME_NAMES,
-        description: "Single best-fit visual theme for this deck's subject and tone.",
-      },
+      palette: PALETTE_JSON_SCHEMA,
       slides: {
         type: "array",
         minItems: 4,
@@ -80,7 +78,7 @@ export const GENERATE_TOOL: Anthropic.Tool = {
         },
       },
     },
-    required: ["title", "subject", "theme", "slides"],
+    required: ["title", "subject", "palette", "slides"],
   },
 };
 
@@ -104,7 +102,7 @@ Some layouts have optional slots (e.g. "eyebrow", "footnote", "subtitle") — sk
 - Use a "chart" only for real numeric data present in the material — never invent numbers. Use a "table" only for real structured info (a comparison, a list of terms, stats) — keep it small enough to read on a slide.
 - Vary layout across slides — don't repeat "title-body" every time. Reach for "big-statistic", "stat-pair", "three-cards" (only when the content is genuinely 2-3 parallel items), "two-column", "chart-text", or "table" wherever the content actually fits that shape better than a title + paragraph.
 - Keep slotted text roughly within what the slot is sized for — a short, punchy line, not a full paragraph, unless the slot is specifically a "body" slot. If content for a slot genuinely runs long, that's fine; it will shrink to fit automatically rather than overflow.
-- Pick ONE "theme" for the whole deck based on the subject's tone: academic or editorial for history/humanities, minimal or futuristic for science/tech/math, playful for something lighter or creative. Don't ask — just choose the best fit.
+- Design this deck's own "palette" from scratch — never fall back to the same colors every time. Ground the hues in THIS subject's own vibe: oceans/water → blues; fire/energy → warm reds and oranges; plants/nature → greens; space → deep indigo/violet; a neutral humanities topic can stay close to ink-on-paper tones. Pick exactly one dark color, one light color (background/surface close to each other), and 1-2 accents — never more. Favor a confident, specific accent over a generic default (don't reach for the same orange or teal on every deck regardless of subject). "text" needs strong contrast against "background" — this is checked and corrected automatically if it's too close, but aim to get it right the first time. Pick "fontDisplay"/"fontBody" to fit the subject's tone too (e.g. "instrument-serif" reads editorial/academic, "outfit" reads modern/geometric, "inter" is the safe neutral default) — they can match if that suits the deck.
 - Give the whole presentation a short, clear "title", and a short "subject" label (1-3 words, e.g. "Biology", "History", "Debate club") that best categorizes it.`;
 
 // ---------------------------------------------------------------------------
@@ -298,7 +296,7 @@ export function shapeIntoPresentation(input: unknown, imagesById: Map<string, st
   const raw = input as {
     title?: string;
     subject?: string;
-    theme?: string;
+    palette?: unknown;
     slides?: Array<{
       layout?: string;
       background?: string;
@@ -334,7 +332,7 @@ export function shapeIntoPresentation(input: unknown, imagesById: Map<string, st
     id: `gen-${Date.now()}`,
     title: typeof raw.title === "string" && raw.title.trim() ? raw.title : "Untitled presentation",
     subject: typeof raw.subject === "string" && raw.subject.trim() ? raw.subject.trim() : "General",
-    theme: pick(raw.theme, new Set(THEME_NAMES), "academic"),
+    theme: normalizePalette(raw.palette, DEFAULT_PALETTE),
     slides,
   };
 }

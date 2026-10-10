@@ -1,8 +1,7 @@
 "use client";
 
 import type { Presentation } from "@/lib/schema";
-import { THEMES } from "@/lib/themes";
-import { CARD_TINTS } from "@/lib/cardTints";
+import { cardTint } from "@/lib/cardTints";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 
 export default function ProjectCard({
@@ -20,7 +19,7 @@ export default function ProjectCard({
   onOpen: () => void;
   onDelete?: () => void;
 }) {
-  const tint = CARD_TINTS[theme];
+  const tint = cardTint(theme);
 
   return (
     <div className="group flex flex-col gap-2">
@@ -64,7 +63,7 @@ export default function ProjectCard({
       <div className="flex flex-col px-0.5">
         <span className="truncate text-sm font-medium text-cream">{title}</span>
         <span className="text-xs text-cream/40">
-          {THEMES[theme].label} · {formatRelativeTime(updatedAt)}
+          {theme.name} · {formatRelativeTime(updatedAt)}
         </span>
       </div>
     </div>

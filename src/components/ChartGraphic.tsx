@@ -1,4 +1,4 @@
-import type { ChartElement, Theme } from "@/lib/schema";
+import type { ChartElement, Palette } from "@/lib/schema";
 import { resolveColor } from "@/lib/themes";
 import { seriesColors } from "@/lib/chartColors";
 
@@ -8,7 +8,7 @@ import { seriesColors } from "@/lib/chartColors";
  * identical in both. Deliberately simple (no charting library).
  */
 
-export default function ChartGraphic({ element, theme }: { element: ChartElement; theme: Theme }) {
+export default function ChartGraphic({ element, theme }: { element: ChartElement; theme: Palette }) {
   const { chartType, data } = element;
   const colors = seriesColors(theme, data.length);
   const mutedColor = resolveColor("muted", theme);

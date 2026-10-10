@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Slide as SlideType, SlideElement, Theme } from "@/lib/schema";
+import type { Slide as SlideType, SlideElement, Palette } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle, pixelDeltaToLogical } from "@/lib/coordinates";
-import { THEMES, resolveColor } from "@/lib/themes";
+import { resolveColor, fontFaceVar } from "@/lib/themes";
 import ChartGraphic from "./ChartGraphic";
 import TableGraphic from "./TableGraphic";
 
@@ -32,7 +32,7 @@ export default function SlideEditor({
   onChange,
 }: {
   slide: SlideType;
-  theme: Theme;
+  theme: Palette;
   onChange: (slide: SlideType) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -174,7 +174,7 @@ function EditableElement({
   onCommitText,
 }: {
   element: SlideElement;
-  theme: Theme;
+  theme: Palette;
   selected: boolean;
   editing: boolean;
   onPointerDown: (e: ReactPointerEvent) => void;
@@ -182,14 +182,13 @@ function EditableElement({
   onCommitText: (text: string) => void;
 }) {
   const style = boxStyle(element);
-  const tokens = THEMES[theme];
   // Selection chrome is a Powerly editor affordance, not part of the slide's
-  // own design — it stays brand-clay regardless of the active slide theme.
+  // own design — it stays brand-clay regardless of the deck's own palette.
   const selectionOutline = selected ? "2px solid #D97A52" : "2px solid transparent";
 
   switch (element.type) {
     case "text": {
-      const fontFamilyVar = element.fontFamily === "display" ? tokens.fontDisplay : tokens.fontBody;
+      const fontFamilyVar = fontFaceVar(element.fontFamily === "display" ? theme.fontDisplay : theme.fontBody);
       const textStyle = {
         fontFamily: fontFamilyVar,
         fontSize: `${(element.fontSize / SLIDE_HEIGHT) * 100}cqh`,

@@ -1,4 +1,4 @@
-import type { TableElement, Theme } from "@/lib/schema";
+import type { TableElement, Palette } from "@/lib/schema";
 import { resolveColor } from "@/lib/themes";
 
 /**
@@ -6,7 +6,7 @@ import { resolveColor } from "@/lib/themes";
  * interactive SlideEditor. Convention: the first row is treated as a
  * header (the AI is instructed to put column headers there).
  */
-export default function TableGraphic({ element, theme }: { element: TableElement; theme: Theme }) {
+export default function TableGraphic({ element, theme }: { element: TableElement; theme: Palette }) {
   const [header, ...body] = element.rows;
   const textColor = resolveColor("text", theme);
   const accentColor = resolveColor("accent", theme);

@@ -1,4 +1,5 @@
-import type { Presentation, Slide, SlideElement, Theme } from "./schema";
+import type { Presentation, Slide, SlideElement } from "./schema";
+import { normalizePalette } from "./paletteFit";
 
 /**
  * Loosely-typed shape of one operation as it comes back from the AI tool
@@ -16,7 +17,7 @@ export type RawEditOperation =
       slide: { layout?: string; background?: string; elements?: Array<Record<string, unknown>> };
     }
   | { op: "delete_slide"; summary: string; slideId: string }
-  | { op: "change_theme"; summary: string; theme: string };
+  | { op: "change_palette"; summary: string; palette: Record<string, unknown> };
 
 /**
  * Applies a list of AI-proposed operations to a presentation, returning a
@@ -80,8 +81,11 @@ export function applyEditOperations(
         next.slides = next.slides.filter((s) => s.id !== op.slideId);
         break;
       }
-      case "change_theme": {
-        next.theme = op.theme as Theme;
+      case "change_palette": {
+        // Same safety net as a freshly generated deck — an AI-proposed
+        // palette (e.g. "make it more autumn-colored") gets validated and
+        // contrast-corrected here too, never trusted as-is.
+        next.theme = normalizePalette(op.palette, next.theme);
         break;
       }
     }

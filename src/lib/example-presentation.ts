@@ -1,16 +1,19 @@
 import { Presentation, PresentationSchema, SLIDE_WIDTH } from "./schema";
+import { DEFAULT_PALETTE } from "./themes";
 
 /**
- * Three hand-authored slides, used to prove multi-slide navigation and
- * theme switching before any AI, auth, or database work exists. Every
- * color is a role (see ColorRoleSchema), not a literal hex — that's what
- * lets the theme switcher actually restyle these.
+ * Hand-authored slides, used to prove multi-slide navigation before any
+ * AI, auth, or database work exists. Every color is a role (see
+ * ColorRoleSchema), not a literal hex — that's what lets a palette (see
+ * PaletteSchema) actually restyle these without touching the slides
+ * themselves. This bundled example deck uses the fallback DEFAULT_PALETTE
+ * rather than an AI-generated one, since nothing generated it.
  */
 const raw = {
   id: "example-presentation",
   title: "Causes of World War I",
   subject: "History",
-  theme: "academic",
+  theme: DEFAULT_PALETTE,
   slides: [
     {
       id: "slide-1",
@@ -65,7 +68,7 @@ const raw = {
           type: "text",
           id: "s1-caption",
           role: "caption",
-          content: "Academic theme · Slide 1 of 5",
+          content: "Slide 1 of 5",
           fontFamily: "body",
           fontSize: 14,
           fontWeight: 500,
@@ -191,7 +194,7 @@ const raw = {
           type: "text",
           id: "s2-caption",
           role: "caption",
-          content: "Academic theme · Slide 2 of 5",
+          content: "Slide 2 of 5",
           fontFamily: "body",
           fontSize: 14,
           fontWeight: 500,
@@ -257,7 +260,7 @@ const raw = {
           type: "text",
           id: "s3-caption",
           role: "caption",
-          content: "Academic theme · Slide 3 of 5",
+          content: "Slide 3 of 5",
           fontFamily: "body",
           fontSize: 14,
           fontWeight: 500,
@@ -366,7 +369,7 @@ const raw = {
           type: "text",
           id: "s4-caption",
           role: "caption",
-          content: "Academic theme · Slide 4 of 5",
+          content: "Slide 4 of 5",
           fontFamily: "body",
           fontSize: 14,
           fontWeight: 500,
@@ -429,7 +432,7 @@ const raw = {
           type: "text",
           id: "s5-caption",
           role: "caption",
-          content: "Academic theme · Slide 5 of 5",
+          content: "Slide 5 of 5",
           fontFamily: "body",
           fontSize: 14,
           fontWeight: 500,

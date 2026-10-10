@@ -8,7 +8,7 @@ import {
   LINE_ELEMENT_JSON_SCHEMA,
   CHART_ELEMENT_JSON_SCHEMA,
   TABLE_ELEMENT_JSON_SCHEMA,
-  THEME_NAMES,
+  PALETTE_JSON_SCHEMA,
 } from "@/lib/aiToolSchemas";
 import { applyEditOperations, type RawEditOperation } from "@/lib/applyEdits";
 
@@ -141,13 +141,14 @@ const EDIT_TOOL: Anthropic.Tool = {
             },
             {
               type: "object",
-              description: "Switch the whole deck's theme.",
+              description:
+                "Propose a brand new bespoke palette for the whole deck — e.g. the student asks to make it 'more festive' or 'match autumn colors'. Design a fresh palette for what they asked; there's no fixed list to pick from.",
               properties: {
-                op: { type: "string", const: "change_theme" },
+                op: { type: "string", const: "change_palette" },
                 summary: { type: "string" },
-                theme: { type: "string", enum: THEME_NAMES },
+                palette: PALETTE_JSON_SCHEMA,
               },
-              required: ["op", "summary", "theme"],
+              required: ["op", "summary", "palette"],
             },
           ],
         },

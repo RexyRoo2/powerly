@@ -132,14 +132,44 @@ export type SlideElement = z.infer<typeof SlideElementSchema>;
 // Slide + Presentation
 // ---------------------------------------------------------------------------
 
-export const ThemeSchema = z.enum([
-  "minimal",
-  "editorial",
-  "futuristic",
-  "academic",
-  "playful",
-]);
-export type Theme = z.infer<typeof ThemeSchema>;
+/**
+ * Every deck used to pick ONE of a handful of fixed preset themes — the
+ * same five color schemes reused by every student, regardless of subject.
+ * Now the AI designs a bespoke palette for THIS deck's own subject (an
+ * oceans topic should actually read as blue), the same way a human
+ * designer — or the reference Claude "Slides" design system — would never
+ * reuse one fixed palette across unrelated briefs. "Theme" as a fixed enum
+ * is gone; a palette is now real generated data, not a lookup key.
+ */
+export const FontChoiceSchema = z.enum(["inter", "instrument-serif", "outfit"]);
+export type FontChoice = z.infer<typeof FontChoiceSchema>;
+
+const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a 6-digit hex color like #1C1712");
+
+const DEFAULT_PALETTE_COLORS = {
+  background: "#1C1712",
+  surface: "#2A231B",
+  text: "#F2E9DA",
+  accent: "#D97A52",
+  muted: "#8FA389",
+};
+
+export const PaletteSchema = z.object({
+  /** Short, evocative name the AI gives its own palette (e.g. "Ocean Depths") — shown on the deck's dashboard card instead of a fixed preset label. */
+  name: z.string().trim().min(1).default("Custom"),
+  colors: z
+    .object({
+      background: HexColorSchema,
+      surface: HexColorSchema,
+      text: HexColorSchema,
+      accent: HexColorSchema,
+      muted: HexColorSchema,
+    })
+    .default(DEFAULT_PALETTE_COLORS),
+  fontDisplay: FontChoiceSchema.default("instrument-serif"),
+  fontBody: FontChoiceSchema.default("inter"),
+});
+export type Palette = z.infer<typeof PaletteSchema>;
 
 export const SlideSchema = z.object({
   id: z.string(),
@@ -154,7 +184,13 @@ export const PresentationSchema = z.object({
   title: z.string(),
   /** Short 1-3 word label (e.g. "Biology", "Debate club") shown on deck cards in the dashboard. */
   subject: z.string().trim().min(1).default("General"),
-  theme: ThemeSchema.default("academic"),
+  /** This deck's own generated palette — see PaletteSchema above. */
+  theme: PaletteSchema.default({
+    name: "Custom",
+    colors: DEFAULT_PALETTE_COLORS,
+    fontDisplay: "instrument-serif",
+    fontBody: "inter",
+  }),
   slides: z.array(SlideSchema),
 });
 export type Presentation = z.infer<typeof PresentationSchema>;

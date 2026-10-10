@@ -1,7 +1,7 @@
 import PptxGenJS from "pptxgenjs";
-import type { Presentation, SlideElement, Theme } from "./schema";
+import type { Presentation, SlideElement, Palette } from "./schema";
 import { SLIDE_WIDTH } from "./schema";
-import { THEMES, resolveColor } from "./themes";
+import { resolveColor } from "./themes";
 import { seriesColors } from "./chartColors";
 
 /**
@@ -31,27 +31,26 @@ function toPt(unitsValue: number): number {
   return toIn(unitsValue) * POINTS_PER_INCH;
 }
 
-function hex(role: Parameters<typeof resolveColor>[0], theme: Theme): string {
+function hex(role: Parameters<typeof resolveColor>[0], theme: Palette): string {
   return resolveColor(role, theme).replace("#", "");
 }
 
-// Same CSS variables themes.ts points fontDisplay/fontBody at, resolved to
-// the real font names self-hosted in the app (globals.css). PowerPoint will
-// substitute a system font for a viewer who doesn't have these installed —
-// a known limitation of exporting a styled web canvas to a static format.
-const CSS_VAR_TO_FONT_NAME: Record<string, string> = {
-  "var(--font-sans)": "Inter",
-  "var(--font-display)": "Instrument Serif",
-  "var(--font-logo)": "Outfit",
+// Real font names self-hosted in the app (globals.css) for each font
+// choice a palette can pick. PowerPoint will substitute a system font for
+// a viewer who doesn't have these installed — a known limitation of
+// exporting a styled web canvas to a static format.
+const FONT_NAME: Record<Palette["fontDisplay"], string> = {
+  inter: "Inter",
+  "instrument-serif": "Instrument Serif",
+  outfit: "Outfit",
 };
 
-function fontFaceFor(fontFamily: "display" | "body", theme: Theme): string {
-  const tokens = THEMES[theme];
-  const cssVar = fontFamily === "display" ? tokens.fontDisplay : tokens.fontBody;
-  return CSS_VAR_TO_FONT_NAME[cssVar] ?? "Inter";
+function fontFaceFor(fontFamily: "display" | "body", theme: Palette): string {
+  const choice = fontFamily === "display" ? theme.fontDisplay : theme.fontBody;
+  return FONT_NAME[choice];
 }
 
-function addElement(pptxSlide: PptxGenJS.Slide, element: SlideElement, theme: Theme) {
+function addElement(pptxSlide: PptxGenJS.Slide, element: SlideElement, theme: Palette) {
   switch (element.type) {
     case "text": {
       pptxSlide.addText(element.content, {
