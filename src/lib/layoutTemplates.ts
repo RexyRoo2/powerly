@@ -70,8 +70,7 @@ const BASE_LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = {
     slots: {
       eyebrow: { x: M, y: TOP, width: 600, height: 30, fontSize: 14, fontFamily: "body", role: "label", optional: true },
       title: { x: M, y: 96, width: 1120, height: 130, fontSize: 40, fontFamily: "display", role: "title" },
-      accentLine: { x: M, y: 244, width: 120, height: 5, fontSize: 1, fontFamily: "body", role: "label", optional: true },
-      body: { x: M, y: 280, width: 1120, height: 360, fontSize: 20, fontFamily: "body", role: "body", lineHeight: 1.45 },
+      body: { x: M, y: 260, width: 1120, height: 380, fontSize: 20, fontFamily: "body", role: "body", lineHeight: 1.45 },
     },
   },
 

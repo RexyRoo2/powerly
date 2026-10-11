@@ -18,10 +18,10 @@ import {
   type Slot,
   type SpacingProfile,
 } from "./layoutTemplates";
-import { fitTextToBox, type FitRole, type FitFontFamily } from "./textFit";
+import { fitTextToBox, estimateTextBlockHeight, type FitRole, type FitFontFamily } from "./textFit";
 import { normalizePalette } from "./paletteFit";
 import { DEFAULT_PALETTE } from "./themes";
-import type { Palette } from "./schema";
+import { SLIDE_HEIGHT, type Palette } from "./schema";
 
 /**
  * Pure presentation-generation logic for /api/generate — the AI tool
@@ -100,7 +100,7 @@ export const SYSTEM_PROMPT = `You are Powerly's presentation architect. Powerly 
 
 Given the student's material, call create_presentation. Rules:
 
-- Element types available: "text", "shape", "line" (a thin divider — prefer this over a thin shape rectangle), "image" (see below), "chart" (bar/line/pie), "table". No other types are rendered yet.
+- Element types available: "text", "shape", "line" (a thin divider — prefer this over a thin shape rectangle), "image" (see below), "chart" (bar/line/pie), "table". No other types are rendered yet. Never place a thin decorative line directly under a slide's title — that's one of the most common AI-generated-slide tells, not a style choice. Use whitespace, or a background color change, to separate a title from what follows instead.
 
 LAYOUT — read this carefully, it's different from freeform design:
 Every slide picks exactly one "layout" from this fixed list. Each layout has a named set of "slots" — a slot is a pre-measured, safe region on the canvas that will never overlap another slot in the same layout. For every element that fills a slot, set its "slot" field to that slot's name and leave x/y/width/height OUT ENTIRELY — the server places it for you, correctly, every time. Do NOT try to compute x/y/width/height for a slotted element; it will be ignored.
@@ -245,14 +245,23 @@ function normalizeElement(
         lineHeight,
       };
     }
-    case "shape":
+    case "shape": {
+      // Not exposed in the model's own tool schema yet (a future Track B
+      // candidate) — only ever set by the server's own synthetic card
+      // backgrounds below, so a dark deck's deliberately-close
+      // surface/background pair (the system prompt asks for exactly that)
+      // doesn't render a "card" that's visually indistinguishable from the
+      // slide behind it.
+      const stroke = typeof el.stroke === "string" && COLOR_ROLES.has(el.stroke) ? el.stroke : undefined;
       return {
         ...box,
         type: "shape",
         shape: pick(el.shape, SHAPE_KINDS, "rectangle"),
         fill: pick(el.fill, COLOR_ROLES, "surface"),
+        ...(stroke ? { stroke } : {}),
         radius: num(el.radius, 0),
       };
+    }
     case "line":
       return {
         ...box,
@@ -305,6 +314,82 @@ function normalizeElement(
   }
 }
 
+// Three-cards is the one template whose visual structure — three distinct
+// card panels — depends entirely on the model remembering to add an
+// optional background shape for each one. Skipped, the layout silently
+// degrades into three loose columns of plain text with no visible card at
+// all (confirmed: this is exactly what shipped in a real generated deck).
+// Rather than keep hoping the model remembers, the server guarantees these
+// the same way background/spacing are already guaranteed elsewhere in this
+// file: picked outside the model's discretion, not left to chance.
+const GUARANTEED_BG_SLOTS: Record<string, string[]> = {
+  "three-cards": ["card1Bg", "card2Bg", "card3Bg"],
+};
+
+// How much of a slide's canvas, below its topmost element, is fair game for
+// content — mirrors the ~60-80 unit margins every layout already keeps at
+// its own edges.
+const BOTTOM_MARGIN = 70;
+// A slide is only rebalanced when its real content leaves a genuinely
+// visible gap at the bottom of its available room — comfortably full
+// slides are left exactly where their template already puts them. Tuned
+// against a real sparse slide (a two-sentence title-body slide used ~57%
+// of its available room and still rendered with an empty bottom half) —
+// 0.55 let that through unchanged, so this sits meaningfully higher.
+const REBALANCE_THRESHOLD = 0.72;
+
+/**
+ * A slide whose layout box has far more room than its content needs doesn't
+ * shrink that box — text renders top-anchored within its slot, so it just
+ * sits at the top with the rest of the canvas empty beneath it (confirmed:
+ * "a line or two in a corner" on several slides of a real generated deck).
+ * This measures a slide's REAL content span — each text element's actual
+ * rendered height (via estimateTextBlockHeight), not its slot's nominal
+ * box height, since a two-line paragraph in a 380-unit body slot only
+ * really uses a fraction of it — against the vertical room available below
+ * its topmost element. If the slide is using well under half of that room,
+ * every element shifts down by half the slack, together, by the same
+ * amount — so elements that were already aligned with each other (two stat
+ * labels, three card titles) stay aligned. This rebalances where the whole
+ * slide sits in the canvas; it never resizes or re-centers any one element
+ * relative to its neighbors.
+ */
+function rebalanceSlideVertically(elements: Record<string, unknown>[]): Record<string, unknown>[] {
+  if (elements.length === 0) return elements;
+
+  let contentTop = Infinity;
+  let contentBottom = -Infinity;
+  for (const el of elements) {
+    const y = num(el.y, 0);
+    contentTop = Math.min(contentTop, y);
+    let bottom: number;
+    if (el.type === "text") {
+      const content = typeof el.content === "string" ? el.content : "";
+      const width = positiveNum(el.width, 1);
+      const fontSize = positiveNum(el.fontSize, 18);
+      const lineHeight = positiveNum(el.lineHeight, 1.3);
+      const fontFamily: FitFontFamily = el.fontFamily === "display" ? "display" : "body";
+      bottom = y + estimateTextBlockHeight(content, width, fontSize, lineHeight, fontFamily);
+    } else {
+      // Non-text elements (shapes, images, charts, tables) genuinely fill
+      // their box — a table's rows spread across it, a chart renders edge
+      // to edge — so their nominal height is already their real height.
+      bottom = y + num(el.height, 0);
+    }
+    contentBottom = Math.max(contentBottom, bottom);
+  }
+  if (!Number.isFinite(contentTop) || !Number.isFinite(contentBottom)) return elements;
+
+  const usedSpan = contentBottom - contentTop;
+  const availableSpan = SLIDE_HEIGHT - BOTTOM_MARGIN - contentTop;
+  if (availableSpan <= 0 || usedSpan >= availableSpan * REBALANCE_THRESHOLD) return elements;
+
+  const shiftY = Math.floor((availableSpan - usedSpan) / 2);
+  if (shiftY <= 0) return elements;
+
+  return elements.map((el) => ({ ...el, y: num(el.y, 0) + shiftY }));
+}
+
 /**
  * The model never invents ids — we assign them deterministically here so
  * they're always unique, instead of trusting the model to not collide.
@@ -341,11 +426,40 @@ export function shapeIntoPresentation(
         return { ...normalized, id: `${slideId}-el-${elIndex + 1}` };
       })
       .filter((el): el is Record<string, unknown> => el !== null);
+
+    // Guarantee this layout's card backgrounds exist even when the model
+    // skipped the optional shape for one — prepended so they paint first
+    // (behind the card's own title/body text, never on top of it).
+    const guaranteedSlots = GUARANTEED_BG_SLOTS[layout] ?? [];
+    const providedSlots = new Set(
+      elementsInput
+        .filter(
+          (el): el is Record<string, unknown> =>
+            !!el && typeof el === "object" && (el as Record<string, unknown>).type === "shape" && typeof (el as Record<string, unknown>).slot === "string"
+        )
+        .map((el) => el.slot as string)
+    );
+    const syntheticBackgrounds = guaranteedSlots
+      .filter((slotName) => !providedSlots.has(slotName))
+      .map((slotName, i): Record<string, unknown> | null => {
+        const normalized = normalizeElement(
+          { type: "shape", slot: slotName, fill: "surface", stroke: "muted", radius: 16 },
+          imagesById,
+          layout,
+          spacingProfile
+        );
+        if (!normalized) return null;
+        return { ...normalized, id: `${slideId}-bg-${i + 1}` };
+      })
+      .filter((el): el is Record<string, unknown> => el !== null);
+
+    const allElements = rebalanceSlideVertically([...syntheticBackgrounds, ...elements]);
+
     return {
       id: slideId,
       layout,
       background: pick(slide.background, new Set(["background", "surface", "contrastBackground"]), "background"),
-      elements,
+      elements: allElements,
     };
   });
 
