@@ -53,7 +53,7 @@ export type LayoutTemplate = {
 const M = 80; // side margin
 const TOP = 60;
 
-export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = {
+const BASE_LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = {
   title: {
     name: "title",
     description: "Opening slide. Eyebrow (optional) + big title + short subtitle.",
@@ -168,19 +168,97 @@ export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = {
   },
 };
 
+// Layout NAMES and descriptions are profile-independent (shown to the
+// model as-is, see presentationGen.ts's LAYOUT_DOCS) — only the actual
+// pixel geometry of each slot varies by spacing profile, below.
+export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = BASE_LAYOUT_TEMPLATES;
 export const LAYOUT_NAMES = Object.keys(LAYOUT_TEMPLATES);
-
-export function getSlot(layout: string, slotName: string): Slot | undefined {
-  return LAYOUT_TEMPLATES[layout]?.slots[slotName];
-}
 
 export function isKnownLayout(layout: string): boolean {
   return Object.prototype.hasOwnProperty.call(LAYOUT_TEMPLATES, layout);
 }
 
+// ---------------------------------------------------------------------------
+// Spacing profiles
+//
+// Every generated deck used the exact same hand-measured pixel coordinates
+// for a given layout name — "title" was always the identical geometry,
+// deck after deck. Only the TEXT changed, never the composition. This is
+// as much a reason generated decks read as interchangeable as the color
+// palette ever was.
+//
+// Each profile below is a single uniform scale + shift applied to EVERY
+// slot in EVERY template, from the canvas's true center. That's
+// deliberately the lowest-risk way to get a genuinely different margin/
+// density/alignment feel per deck without hand-authoring a second full set
+// of measurements (and the overlap/bounds risk that would carry): a
+// uniform affine transform applied identically to every box in a template
+// can only ever preserve their relative positions and gaps, scaled — it
+// can't introduce a NEW overlap where the hand-measured original had none,
+// and assertNoOverlaps() below re-verifies every profile anyway.
+// ---------------------------------------------------------------------------
+
+export type SpacingProfile = "balanced" | "airy" | "bold" | "editorial";
+export const SPACING_PROFILE_NAMES: SpacingProfile[] = ["balanced", "airy", "bold", "editorial"];
+
+type ProfileTransform = { scale: number; shiftX: number; shiftY: number };
+
+const SPACING_PROFILE_TRANSFORMS: Record<SpacingProfile, ProfileTransform> = {
+  // Unchanged — today's hand-measured geometry, exactly as before profiles existed.
+  balanced: { scale: 1, shiftX: 0, shiftY: 0 },
+  // Pulled in from every edge: noticeably more whitespace, a quieter, more editorial-magazine feel.
+  airy: { scale: 0.88, shiftX: 0, shiftY: 0 },
+  // Pushed out toward every edge: smaller margins, content fills more of the canvas, a denser/bolder feel.
+  bold: { scale: 1.08, shiftX: 0, shiftY: -4 },
+  // A genuine compositional change, not just density: the whole content block shifts right, so the
+  // left margin reads noticeably bigger than the right — an asymmetric, off-center editorial layout.
+  editorial: { scale: 0.95, shiftX: 36, shiftY: 0 },
+};
+
+function transformSlot(slot: Slot, t: ProfileTransform): Slot {
+  const cx = SLIDE_WIDTH / 2;
+  const cy = SLIDE_HEIGHT / 2;
+  return {
+    ...slot,
+    x: Math.round(cx + (slot.x - cx) * t.scale + t.shiftX),
+    y: Math.round(cy + (slot.y - cy) * t.scale + t.shiftY),
+    width: Math.round(slot.width * t.scale),
+    height: Math.round(slot.height * t.scale),
+    fontSize: Math.round(slot.fontSize * t.scale),
+  };
+}
+
+function buildTemplatesForProfile(profile: SpacingProfile): Record<string, LayoutTemplate> {
+  if (profile === "balanced") return BASE_LAYOUT_TEMPLATES;
+  const t = SPACING_PROFILE_TRANSFORMS[profile];
+  const out: Record<string, LayoutTemplate> = {};
+  for (const [key, template] of Object.entries(BASE_LAYOUT_TEMPLATES)) {
+    const slots: Record<string, Slot> = {};
+    for (const [slotName, slot] of Object.entries(template.slots)) {
+      slots[slotName] = transformSlot(slot, t);
+    }
+    out[key] = { ...template, slots };
+  }
+  return out;
+}
+
+const TEMPLATES_BY_PROFILE: Record<SpacingProfile, Record<string, LayoutTemplate>> = {
+  balanced: BASE_LAYOUT_TEMPLATES,
+  airy: buildTemplatesForProfile("airy"),
+  bold: buildTemplatesForProfile("bold"),
+  editorial: buildTemplatesForProfile("editorial"),
+};
+
+export function getSlot(layout: string, slotName: string, profile: SpacingProfile = "balanced"): Slot | undefined {
+  return TEMPLATES_BY_PROFILE[profile]?.[layout]?.slots[slotName];
+}
+
 // Sanity-checked once at module load, in dev, so a geometry mistake in a
 // template (now the ONE place layout bugs could hide) is caught immediately
-// instead of showing up as a rendering bug in someone's generated deck.
+// instead of showing up as a rendering bug in someone's generated deck. Runs
+// over every spacing profile, not just the base set — a transform preset
+// that pushes a slot out of bounds (e.g. too aggressive a shift/scale) is
+// caught here too, not discovered in a real deck.
 //
 // A "*Bg" slot (a card's background panel) is deliberately excluded from
 // the overlap check against its own card's content slots — a background
@@ -188,19 +266,22 @@ export function isKnownLayout(layout: string): boolean {
 // it, not a collision. Real collisions are between two pieces of content
 // competing for the same space, which this still catches.
 function assertNoOverlaps() {
-  for (const template of Object.values(LAYOUT_TEMPLATES)) {
-    const boxes = Object.entries(template.slots);
-    for (let i = 0; i < boxes.length; i++) {
-      const [nameA, a] = boxes[i];
-      if (a.x < 0 || a.y < 0 || a.x + a.width > SLIDE_WIDTH || a.y + a.height > SLIDE_HEIGHT) {
-        throw new Error(`layoutTemplates: "${template.name}.${nameA}" falls outside the ${SLIDE_WIDTH}x${SLIDE_HEIGHT} canvas`);
-      }
-      for (let j = i + 1; j < boxes.length; j++) {
-        const [nameB, b] = boxes[j];
-        if (nameA.endsWith("Bg") || nameB.endsWith("Bg")) continue; // background panel, expected to underlap its card's content
-        const overlaps = a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-        if (overlaps) {
-          throw new Error(`layoutTemplates: "${template.name}.${nameA}" overlaps "${template.name}.${nameB}"`);
+  for (const profile of SPACING_PROFILE_NAMES) {
+    const templates = TEMPLATES_BY_PROFILE[profile];
+    for (const template of Object.values(templates)) {
+      const boxes = Object.entries(template.slots);
+      for (let i = 0; i < boxes.length; i++) {
+        const [nameA, a] = boxes[i];
+        if (a.x < 0 || a.y < 0 || a.x + a.width > SLIDE_WIDTH || a.y + a.height > SLIDE_HEIGHT) {
+          throw new Error(`layoutTemplates: [${profile}] "${template.name}.${nameA}" falls outside the ${SLIDE_WIDTH}x${SLIDE_HEIGHT} canvas`);
+        }
+        for (let j = i + 1; j < boxes.length; j++) {
+          const [nameB, b] = boxes[j];
+          if (nameA.endsWith("Bg") || nameB.endsWith("Bg")) continue; // background panel, expected to underlap its card's content
+          const overlaps = a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+          if (overlaps) {
+            throw new Error(`layoutTemplates: [${profile}] "${template.name}.${nameA}" overlaps "${template.name}.${nameB}"`);
+          }
         }
       }
     }

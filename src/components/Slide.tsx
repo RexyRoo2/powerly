@@ -1,14 +1,14 @@
 import type { Slide as SlideType, SlideElement, Palette } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle } from "@/lib/coordinates";
-import { resolveColor, fontFaceVar, slideBackgroundColor, effectivePalette } from "@/lib/themes";
+import { resolveColor, fontStackFor, slideBackgroundColor, effectivePalette } from "@/lib/themes";
 import ChartGraphic from "./ChartGraphic";
 import TableGraphic from "./TableGraphic";
 
 function ElementRenderer({ element, theme }: { element: SlideElement; theme: Palette }) {
   switch (element.type) {
     case "text": {
-      const fontFamilyVar = fontFaceVar(element.fontFamily === "display" ? theme.fontDisplay : theme.fontBody);
+      const fontFamilyVar = fontStackFor(element.fontFamily === "display" ? theme.fontDisplay : theme.fontBody);
       return (
         <div
           style={{

@@ -165,7 +165,16 @@ export function withOptionalGeometry<T extends { required: readonly string[] }>(
   return { ...schema, required };
 }
 
-export const FONT_CHOICES = ["inter", "instrument-serif", "outfit"] as const;
+export const FONT_CHOICES = [
+  "inter",
+  "instrument-serif",
+  "outfit",
+  "space-grotesk",
+  "playfair-display",
+  "fraunces",
+  "jetbrains-mono",
+  "libre-baskerville",
+] as const;
 
 /**
  * Shared JSON-schema fragment for a deck's own bespoke palette — used by
@@ -199,8 +208,8 @@ export const PALETTE_JSON_SCHEMA = {
       },
       required: ["background", "surface", "text", "accent", "muted", "contrastBackground"],
     },
-    fontDisplay: { type: "string", enum: FONT_CHOICES, description: "Font for titles and big standalone statements." },
-    fontBody: { type: "string", enum: FONT_CHOICES, description: "Font for body/caption/label text. Can match fontDisplay if that suits the deck." },
+    fontDisplay: { type: "string", enum: FONT_CHOICES, description: "Font for titles and big standalone statements. See the system prompt for each font's character — pick deliberately for THIS subject, don't default to the same one every time." },
+    fontBody: { type: "string", enum: FONT_CHOICES, description: "Font for body/caption/label text. Can match fontDisplay if that suits the deck. Favor a plainer, more neutral choice here if fontDisplay is already a strong character font." },
   },
   required: ["name", "colors", "fontDisplay", "fontBody"],
 } as const;

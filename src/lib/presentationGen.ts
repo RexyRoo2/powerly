@@ -9,7 +9,15 @@ import {
   PALETTE_JSON_SCHEMA,
   withOptionalGeometry,
 } from "./aiToolSchemas";
-import { LAYOUT_NAMES, LAYOUT_TEMPLATES, getSlot, isKnownLayout, type Slot } from "./layoutTemplates";
+import {
+  LAYOUT_NAMES,
+  LAYOUT_TEMPLATES,
+  getSlot,
+  isKnownLayout,
+  SPACING_PROFILE_NAMES,
+  type Slot,
+  type SpacingProfile,
+} from "./layoutTemplates";
 import { fitTextToBox, type FitRole, type FitFontFamily } from "./textFit";
 import { normalizePalette } from "./paletteFit";
 import { DEFAULT_PALETTE } from "./themes";
@@ -108,7 +116,7 @@ Some layouts have optional slots (e.g. "eyebrow", "footnote", "subtitle") — sk
 - Use a "chart" only for real numeric data present in the material — never invent numbers. Use a "table" only for real structured info (a comparison, a list of terms, stats) — keep it small enough to read on a slide.
 - Vary layout across slides — don't repeat "title-body" every time. Reach for "big-statistic", "stat-pair", "three-cards" (only when the content is genuinely 2-3 parallel items), "two-column", "chart-text", or "table" wherever the content actually fits that shape better than a title + paragraph.
 - Keep slotted text roughly within what the slot is sized for — a short, punchy line, not a full paragraph, unless the slot is specifically a "body" slot. If content for a slot genuinely runs long, that's fine; it will shrink to fit automatically rather than overflow.
-- Design this deck's own "palette" from scratch — never fall back to the same look deck after deck. The single most common failure mode for an AI designing a palette (yours included) is a near-black background with a warm orange/red/terracotta accent, regardless of subject — treat that exact combination as off-limits unless you're given no other direction and the subject is specifically about fire or heat, and even then prefer something more specific than generic terracotta. If you're told to design a DARK or LIGHT deck below, that instruction is mandatory and comes first; fit the subject's hues into it rather than overriding it. Ground the hues in THIS subject's own vibe: oceans/water → blues; fire/volcanoes/energy → warm reds and oranges; plants/botany → greens; space → deep indigo/violet; finance/business → navy and gold; a light, paper-like humanities topic → cream/ink tones; a playful or young-audience topic → bright, saturated, lighter colors. Pick exactly one dark color, one light color, and 1-2 accents — never more — and keep background/surface close to each other (both read as the same light-or-dark family; a light deck's "surface" is a touch warmer or cooler than its "background", not a dark card floating on a light page, and vice versa). "text" needs strong contrast against "background" — this is checked and corrected automatically if it's too close, but aim to get it right the first time. Also design "contrastBackground" — the OPPOSITE mode from background/surface (light if they're dark, dark if they're light), from the same color story (e.g. the deepest or lightest tone already implied by the hue you picked). Pick "fontDisplay"/"fontBody" to fit the subject's tone too (e.g. "instrument-serif" reads editorial/academic, "outfit" reads modern/geometric, "inter" is the safe neutral default) — vary the pairing across decks too, don't default to the same one every time.
+- Design this deck's own "palette" from scratch — never fall back to the same look deck after deck. The single most common failure mode for an AI designing a palette (yours included) is a near-black background with a warm orange/red/terracotta accent, regardless of subject — treat that exact combination as off-limits unless you're given no other direction and the subject is specifically about fire or heat, and even then prefer something more specific than generic terracotta. If you're told to design a DARK or LIGHT deck below, that instruction is mandatory and comes first; fit the subject's hues into it rather than overriding it. Ground the hues in THIS subject's own vibe: oceans/water → blues; fire/volcanoes/energy → warm reds and oranges; plants/botany → greens; space → deep indigo/violet; finance/business → navy and gold; a light, paper-like humanities topic → cream/ink tones; a playful or young-audience topic → bright, saturated, lighter colors. Pick exactly one dark color, one light color, and 1-2 accents — never more — and keep background/surface close to each other (both read as the same light-or-dark family; a light deck's "surface" is a touch warmer or cooler than its "background", not a dark card floating on a light page, and vice versa). "text" needs strong contrast against "background" — this is checked and corrected automatically if it's too close, but aim to get it right the first time. Also design "contrastBackground" — the OPPOSITE mode from background/surface (light if they're dark, dark if they're light), from the same color story (e.g. the deepest or lightest tone already implied by the hue you picked). Pick "fontDisplay"/"fontBody" deliberately for THIS subject — there are 8 real choices, not 3, and picking the same pairing deck after deck is exactly the kind of sameness to avoid: "inter" (clean neutral grotesk — safe, modern, works for almost anything as a BODY font, less interesting as a display font), "outfit" (geometric sans with more shape, confident/modern), "space-grotesk" (technical, engineered-feeling sans — science, space, tech topics), "instrument-serif" (elegant high-contrast display serif — editorial/academic), "playfair-display" (classic dramatic high-contrast serif — history, formal, humanities), "fraunces" (warm soft-edged serif with character — nature, biology, creative/humanities topics), "libre-baskerville" (a classic, highly readable BOOK serif — a literary or historical deck can use this as body text, not just display), "jetbrains-mono" (monospace — great for a CS/math/data-heavy deck, especially as the display font for a big stat number). Don't reach for "instrument-serif" + "inter" out of habit — that pairing is fine sometimes, but it should be a deliberate choice for THIS deck, not the default. If fontDisplay is already a strong character font, fontBody usually stays plainer for readability.
 - Every slide's "background" is "background" or "surface" by default (the deck's main mood) — EXCEPT exactly 1-2 slides, which should use "contrastBackground" instead, for deliberate emphasis: the best candidates are the title slide, the closing slide, or ONE striking mid-deck moment (a single dramatic statistic, a case study). This mirrors how a real designer alternates a dark hero section with light content sections in the same color story, instead of every slide having the same mood. Don't use "contrastBackground" on more than 2-3 slides in one deck — it's for emphasis, not the deck's default.
 - Give the whole presentation a short, clear "title", and a short "subject" label (1-3 words, e.g. "Biology", "History", "Debate club") that best categorizes it.`;
 
@@ -162,11 +170,12 @@ function pick<T extends string>(v: unknown, allowed: Set<T>, fallback: T): T {
  */
 function resolveGeometry(
   el: Record<string, unknown>,
-  layout: string
+  layout: string,
+  profile: SpacingProfile
 ): { x: number; y: number; width: number; height: number; slot?: Slot } | null {
   const slotName = typeof el.slot === "string" ? el.slot : undefined;
   if (slotName) {
-    const slot = getSlot(layout, slotName);
+    const slot = getSlot(layout, slotName, profile);
     if (slot) {
       return { x: slot.x, y: slot.y, width: slot.width, height: slot.height, slot };
     }
@@ -189,10 +198,11 @@ function resolveGeometry(
 function normalizeElement(
   el: Record<string, unknown>,
   imagesById: Map<string, string>,
-  layout: string
+  layout: string,
+  profile: SpacingProfile
 ): Record<string, unknown> | null {
   if (!el || typeof el !== "object") return null;
-  const geometry = resolveGeometry(el, layout);
+  const geometry = resolveGeometry(el, layout, profile);
   if (!geometry) return null;
   const { x, y, width, height, slot } = geometry;
   const box = { x, y, width, height };
@@ -299,7 +309,11 @@ function normalizeElement(
  * The model never invents ids — we assign them deterministically here so
  * they're always unique, instead of trusting the model to not collide.
  */
-export function shapeIntoPresentation(input: unknown, imagesById: Map<string, string>) {
+export function shapeIntoPresentation(
+  input: unknown,
+  imagesById: Map<string, string>,
+  spacingProfile: SpacingProfile = "balanced"
+) {
   const raw = input as {
     title?: string;
     subject?: string;
@@ -322,7 +336,7 @@ export function shapeIntoPresentation(input: unknown, imagesById: Map<string, st
     const elementsInput = Array.isArray(slide?.elements) ? slide.elements : [];
     const elements = elementsInput
       .map((el, elIndex): Record<string, unknown> | null => {
-        const normalized = normalizeElement(el, imagesById, layout);
+        const normalized = normalizeElement(el, imagesById, layout, spacingProfile);
         if (!normalized) return null;
         return { ...normalized, id: `${slideId}-el-${elIndex + 1}` };
       })
@@ -342,6 +356,20 @@ export function shapeIntoPresentation(input: unknown, imagesById: Map<string, st
     theme: normalizePalette(raw.palette, DEFAULT_PALETTE),
     slides,
   };
+}
+
+/**
+ * Picks this generation's spacing/layout personality — server-side, before
+ * the model ever runs, the same guaranteed-not-left-to-chance mechanism as
+ * pickBackgroundDirective. Every named layout ("title", "three-cards", …)
+ * keeps the model's job identical; only the actual pixel geometry behind
+ * each slot shifts per profile (see layoutTemplates.ts), so two decks that
+ * both pick "title-body" can still look structurally different — different
+ * margins, different density, sometimes a genuinely off-center composition
+ * — not just different text.
+ */
+export function pickSpacingProfile(): SpacingProfile {
+  return SPACING_PROFILE_NAMES[Math.floor(Math.random() * SPACING_PROFILE_NAMES.length)];
 }
 
 // ---------------------------------------------------------------------------

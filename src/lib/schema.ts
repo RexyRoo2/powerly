@@ -141,7 +141,16 @@ export type SlideElement = z.infer<typeof SlideElementSchema>;
  * reuse one fixed palette across unrelated briefs. "Theme" as a fixed enum
  * is gone; a palette is now real generated data, not a lookup key.
  */
-export const FontChoiceSchema = z.enum(["inter", "instrument-serif", "outfit"]);
+export const FontChoiceSchema = z.enum([
+  "inter",
+  "instrument-serif",
+  "outfit",
+  "space-grotesk",
+  "playfair-display",
+  "fraunces",
+  "jetbrains-mono",
+  "libre-baskerville",
+]);
 export type FontChoice = z.infer<typeof FontChoiceSchema>;
 
 const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a 6-digit hex color like #1C1712");

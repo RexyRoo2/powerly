@@ -8,6 +8,7 @@ import {
   shapeIntoPresentation,
   pickBackgroundDirective,
   describeRecentPalettes,
+  pickSpacingProfile,
 } from "@/lib/presentationGen";
 
 export const runtime = "nodejs";
@@ -108,6 +109,12 @@ export async function POST(req: Request) {
   // model's control, plus a best-effort "don't repeat these" note built
   // from whatever this student has actually saved so far.
   const { value: backgroundValue, instruction: backgroundInstruction } = pickBackgroundDirective();
+  // Same guaranteed-not-left-to-chance mechanism as the background
+  // direction above, for a totally different axis: which hand-measured
+  // margin/density/alignment personality this deck's slots use. See
+  // layoutTemplates.ts — the model's layout picks ("title", "three-cards",
+  // …) are unaffected; only the actual pixel geometry behind them shifts.
+  const spacingProfile = pickSpacingProfile();
   const { data: recentRows } = await supabase
     .from("presentations")
     .select("data")
@@ -170,7 +177,7 @@ export async function POST(req: Request) {
 
   let presentation: ReturnType<typeof shapeIntoPresentation>;
   try {
-    presentation = shapeIntoPresentation(toolUse.input, imagesById);
+    presentation = shapeIntoPresentation(toolUse.input, imagesById, spacingProfile);
   } catch (err) {
     console.error("Failed to normalize the AI's presentation output", err);
     return NextResponse.json(
@@ -197,6 +204,7 @@ export async function POST(req: Request) {
 
   console.log("Generated presentation", {
     backgroundDirective: backgroundValue,
+    spacingProfile,
     resolvedBackground: parsed.data.theme.colors.background,
     accent: parsed.data.theme.colors.accent,
   });

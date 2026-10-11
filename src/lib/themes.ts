@@ -11,15 +11,26 @@ import type { ColorRole, Palette, FontChoice, SlideBackgroundRole } from "./sche
  * produces something unusable).
  */
 
-const FONT_FACE_VAR: Record<FontChoice, string> = {
-  inter: "var(--font-sans)",
-  "instrument-serif": "var(--font-display)",
-  outfit: "var(--font-logo)",
+// Deck-rendering fonts are deliberately their OWN lookup, separate from
+// Powerly's app-chrome fonts (--font-sans/--font-display/--font-logo in
+// globals.css, used by the dashboard UI and the "powerly." logo) — a
+// deck's palette can pick any of these regardless of what Powerly's own
+// branding is doing. Every value here needs its weight files imported in
+// layout.tsx, or it silently falls back to the browser default.
+const FONT_STACK: Record<FontChoice, string> = {
+  inter: "'Inter', sans-serif",
+  "instrument-serif": "'Instrument Serif', serif",
+  outfit: "'Outfit', sans-serif",
+  "space-grotesk": "'Space Grotesk', sans-serif",
+  "playfair-display": "'Playfair Display', serif",
+  fraunces: "'Fraunces', serif",
+  "jetbrains-mono": "'JetBrains Mono', monospace",
+  "libre-baskerville": "'Libre Baskerville', serif",
 };
 
-/** CSS custom property for a font choice, for the in-app (web) renderer. */
-export function fontFaceVar(choice: FontChoice): string {
-  return FONT_FACE_VAR[choice];
+/** CSS font-family stack for a font choice, for the in-app (web) renderer. */
+export function fontStackFor(choice: FontChoice): string {
+  return FONT_STACK[choice];
 }
 
 export function resolveColor(role: ColorRole, theme: Palette): string {

@@ -7,6 +7,24 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
+// Every font a generated deck's palette can pick (FontChoiceSchema in
+// schema.ts) needs its weight files imported here — a deck that picks a
+// font with no matching import here silently falls back to the browser
+// default, which is exactly the kind of "ships fine, looks wrong" bug
+// nothing else catches. Only 400/600 are loaded per added font (deck text
+// only ever renders at weight 400/500/600/700, and 600 reads close enough
+// to 700 that a true 700 file isn't worth the extra weight) — the existing
+// three fonts above keep their own already-tuned weight sets.
+import "@fontsource/space-grotesk/400.css";
+import "@fontsource/space-grotesk/600.css";
+import "@fontsource/playfair-display/400.css";
+import "@fontsource/playfair-display/600.css";
+import "@fontsource/fraunces/400.css";
+import "@fontsource/fraunces/600.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/600.css";
+import "@fontsource/libre-baskerville/400.css";
+import "@fontsource/libre-baskerville/600.css";
 import "./globals.css";
 
 const DESCRIPTION =

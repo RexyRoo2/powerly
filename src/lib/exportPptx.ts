@@ -43,6 +43,11 @@ const FONT_NAME: Record<Palette["fontDisplay"], string> = {
   inter: "Inter",
   "instrument-serif": "Instrument Serif",
   outfit: "Outfit",
+  "space-grotesk": "Space Grotesk",
+  "playfair-display": "Playfair Display",
+  fraunces: "Fraunces",
+  "jetbrains-mono": "JetBrains Mono",
+  "libre-baskerville": "Libre Baskerville",
 };
 
 function fontFaceFor(fontFamily: "display" | "body", theme: Palette): string {
