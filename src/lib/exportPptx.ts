@@ -1,7 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import type { Presentation, SlideElement, Palette } from "./schema";
 import { SLIDE_WIDTH } from "./schema";
-import { resolveColor } from "./themes";
+import { resolveColor, slideBackgroundColor, effectivePalette } from "./themes";
 import { seriesColors } from "./chartColors";
 
 /**
@@ -207,9 +207,14 @@ export async function exportPresentationToPptx(presentation: Presentation): Prom
 
   for (const slide of presentation.slides) {
     const pptxSlide = pptx.addSlide();
-    pptxSlide.background = { color: hex(slide.background, presentation.theme) };
+    pptxSlide.background = { color: slideBackgroundColor(slide.background, presentation.theme).replace("#", "") };
+    // Same per-slide remap the in-app renderer uses (see themes.ts) — a
+    // slide on the deck's dark "contrastBackground" needs its elements
+    // resolved against the contrast variants, or exported text would be
+    // the wrong color for the backdrop it's actually sitting on.
+    const elementTheme = effectivePalette(presentation.theme, slide.background);
     for (const element of slide.elements) {
-      addElement(pptxSlide, element, presentation.theme);
+      addElement(pptxSlide, element, elementTheme);
     }
   }
 

@@ -123,6 +123,32 @@ export function ensureContrast(fgHex: string, bgHex: string, minRatio: number): 
   return towardLight ? "#F5F3EE" : "#1A1714";
 }
 
+/**
+ * Pushes candidateHex's lightness away from referenceHex until the two are
+ * visibly distinct backdrops (not just technically-different hex values) —
+ * the safety net under "contrastBackground", the same way ensureContrast is
+ * the safety net under text-on-background legibility. Without this, an AI
+ * that picks two similar-lightness tones for background/contrastBackground
+ * would silently defeat the whole point of having a second, opposite-mood
+ * tone to alternate into.
+ */
+export function ensureOppositeLightness(candidateHex: string, referenceHex: string, minDelta = 0.3): string {
+  if (!isValidHex(candidateHex) || !isValidHex(referenceHex)) return candidateHex;
+  const refLum = relativeLuminance(referenceHex);
+  if (Math.abs(relativeLuminance(candidateHex) - refLum) >= minDelta) return candidateHex;
+
+  // Reference is dark -> push candidate light, and vice versa.
+  const towardLight = refLum < 0.5;
+  const [h, s, startL] = hexToHsl(candidateHex);
+  let l = startL;
+  for (let i = 0; i < 24; i++) {
+    l = towardLight ? Math.min(100, l + 4) : Math.max(0, l - 4);
+    const next = hslToHex(h, s, l);
+    if (Math.abs(relativeLuminance(next) - refLum) >= minDelta || l <= 0 || l >= 100) return next;
+  }
+  return towardLight ? "#F5F3EE" : "#1A1714";
+}
+
 const FONT_CHOICE_SET = new Set(FontChoiceSchema.options);
 
 function pickFont(v: unknown, fallback: FontChoice): FontChoice {
@@ -151,9 +177,26 @@ export function normalizePalette(raw: unknown, fallback: Palette): Palette {
   accent = ensureContrast(accent, background, 3);
   muted = ensureContrast(muted, background, 3);
 
+  // The "contrast" side is a deliberately opposite-mood backdrop for 1-2
+  // standout slides (see SlideBackgroundSchema). Only contrastBackground
+  // itself is AI-provided (with a fallback + opposite-lightness safety
+  // net) — contrastText/Accent/Muted are always DERIVED from this same
+  // palette's own background/accent/muted hues, re-pushed for legibility
+  // against the new backdrop. This keeps the "contrast" side visually
+  // part of the same palette (not an arbitrary black/white swap) while
+  // guaranteeing it's actually legible, without ever asking the AI for
+  // three more hex values it would likely get contrast-wrong anyway.
+  let contrastBackground = isValidHex(rawColors.contrastBackground)
+    ? rawColors.contrastBackground
+    : fallback.colors.contrastBackground;
+  contrastBackground = ensureOppositeLightness(contrastBackground, background);
+  const contrastText = ensureContrast(background, contrastBackground, 4.5);
+  const contrastAccent = ensureContrast(accent, contrastBackground, 3);
+  const contrastMuted = ensureContrast(muted, contrastBackground, 3);
+
   return {
     name: typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 40) : fallback.name,
-    colors: { background, surface, text, accent, muted },
+    colors: { background, surface, text, accent, muted, contrastBackground, contrastText, contrastAccent, contrastMuted },
     fontDisplay: pickFont(r.fontDisplay, fallback.fontDisplay),
     fontBody: pickFont(r.fontBody, fallback.fontBody),
   };

@@ -185,15 +185,19 @@ export const PALETTE_JSON_SCHEMA = {
     colors: {
       type: "object",
       description:
-        "Exactly one dark color, one light color, and 1-2 accents, as 6-digit hex strings (#RRGGBB). Pick a clearly dark OR clearly light pair for background/surface (surface a touch lighter or darker than background, for card panels) — never a mid-gray pair. \"text\" must read clearly against \"background\" (strong contrast: near-white text on a dark background, near-black text on a light one — this is checked and corrected automatically if it's too close, but aim to get it right). \"accent\" is the one standout color, used sparingly for emphasis. \"muted\" is a dimmer tone for captions/labels/dividers, still legible on \"background\".",
+        "Exactly one dark color, one light color, and 1-2 accents, as 6-digit hex strings (#RRGGBB). Pick a clearly dark OR clearly light pair for background/surface (surface a touch lighter or darker than background, for card panels) — never a mid-gray pair. \"text\" must read clearly against \"background\" (strong contrast: near-white text on a dark background, near-black text on a light one — this is checked and corrected automatically if it's too close, but aim to get it right). \"accent\" is the one standout color, used sparingly for emphasis. \"muted\" is a dimmer tone for captions/labels/dividers, still legible on \"background\". \"contrastBackground\" is a SECOND backdrop in the OPPOSITE mode (light if background/surface are dark, dark if they're light) — used on 1-2 standout slides (a cover, a big case-study moment, a closing) so the deck isn't locked to one mood for every slide, the way a real designer alternates a dark hero section with light content sections in the same color story. Its own text/accent/muted variants are worked out automatically — just pick the backdrop color itself, clearly opposite in lightness from \"background\".",
       properties: {
         background: { type: "string", description: "6-digit hex, e.g. \"#102A3E\"." },
         surface: { type: "string", description: "6-digit hex. Card/panel background — close to background, a touch lighter or darker." },
         text: { type: "string", description: "6-digit hex. Main copy color — must contrast clearly against background." },
         accent: { type: "string", description: "6-digit hex. The one standout color, used sparingly (1-2 elements per slide at most)." },
         muted: { type: "string", description: "6-digit hex. For captions/labels/dividers — dimmer than text, still legible on background." },
+        contrastBackground: {
+          type: "string",
+          description: "6-digit hex. A second backdrop, deliberately the OPPOSITE lightness from \"background\" — for 1-2 standout slides only, not most of the deck.",
+        },
       },
-      required: ["background", "surface", "text", "accent", "muted"],
+      required: ["background", "surface", "text", "accent", "muted", "contrastBackground"],
     },
     fontDisplay: { type: "string", enum: FONT_CHOICES, description: "Font for titles and big standalone statements." },
     fontBody: { type: "string", enum: FONT_CHOICES, description: "Font for body/caption/label text. Can match fontDisplay if that suits the deck." },

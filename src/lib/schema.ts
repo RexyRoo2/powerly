@@ -152,6 +152,17 @@ const DEFAULT_PALETTE_COLORS = {
   text: "#F2E9DA",
   accent: "#D97A52",
   muted: "#8FA389",
+  // "Contrast" is a second, deliberately opposite-lightness tone within
+  // the SAME palette — lets a deck use dark for 1-2 standout slides (a
+  // cover, a case-study moment, a closing) and light for the rest, on
+  // purpose, instead of being locked to one mood for every slide. text/
+  // accent/muted are always derived from the base colors above by
+  // normalizePalette (paletteFit.ts) — never asked of the AI directly —
+  // so these fallback values are only a safety net, not what ships.
+  contrastBackground: "#F2E9DA",
+  contrastText: "#1C1712",
+  contrastAccent: "#A8471F",
+  contrastMuted: "#5C6B52",
 };
 
 export const PaletteSchema = z.object({
@@ -164,6 +175,10 @@ export const PaletteSchema = z.object({
       text: HexColorSchema,
       accent: HexColorSchema,
       muted: HexColorSchema,
+      contrastBackground: HexColorSchema,
+      contrastText: HexColorSchema,
+      contrastAccent: HexColorSchema,
+      contrastMuted: HexColorSchema,
     })
     .default(DEFAULT_PALETTE_COLORS),
   fontDisplay: FontChoiceSchema.default("instrument-serif"),
@@ -171,10 +186,19 @@ export const PaletteSchema = z.object({
 });
 export type Palette = z.infer<typeof PaletteSchema>;
 
+/**
+ * Which tone of the deck's palette a given slide's own background uses.
+ * "background"/"surface" are the deck's main mood (dark XOR light);
+ * "contrastBackground" deliberately flips to the opposite mood for one
+ * standout slide — see the comment on DEFAULT_PALETTE_COLORS above.
+ */
+export const SlideBackgroundSchema = z.enum(["background", "surface", "contrastBackground"]);
+export type SlideBackgroundRole = z.infer<typeof SlideBackgroundSchema>;
+
 export const SlideSchema = z.object({
   id: z.string(),
   layout: z.string().default("blank"),
-  background: ColorRoleSchema.default("background"),
+  background: SlideBackgroundSchema.default("background"),
   elements: z.array(SlideElementSchema),
 });
 export type Slide = z.infer<typeof SlideSchema>;

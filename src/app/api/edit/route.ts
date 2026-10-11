@@ -118,7 +118,7 @@ const EDIT_TOOL: Anthropic.Tool = {
                   type: "object",
                   properties: {
                     layout: { type: "string" },
-                    background: { type: "string", enum: ["background", "surface"] },
+                    background: { type: "string", enum: ["background", "surface", "contrastBackground"] },
                     elements: {
                       type: "array",
                       items: { anyOf: ADDABLE_ELEMENT_SCHEMAS },

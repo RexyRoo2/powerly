@@ -1,7 +1,7 @@
 import type { Slide as SlideType, SlideElement, Palette } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle } from "@/lib/coordinates";
-import { resolveColor, fontFaceVar } from "@/lib/themes";
+import { resolveColor, fontFaceVar, slideBackgroundColor, effectivePalette } from "@/lib/themes";
 import ChartGraphic from "./ChartGraphic";
 import TableGraphic from "./TableGraphic";
 
@@ -83,17 +83,24 @@ function ElementRenderer({ element, theme }: { element: SlideElement; theme: Pal
 }
 
 export default function Slide({ slide, theme }: { slide: SlideType; theme: Palette }) {
+  // Elements never know which background mode their slide is in — they
+  // always just resolve "text"/"accent"/"muted" against whatever palette
+  // they're handed. effectivePalette is where that mode gets decided, once
+  // per slide, so a slide using the deck's dark "contrastBackground" gets
+  // correctly-legible text/accent/muted instead of colors tuned for the
+  // other mood.
+  const elementTheme = effectivePalette(theme, slide.background);
   return (
     <div
       className="relative w-full overflow-hidden rounded-2xl shadow-2xl"
       style={{
         aspectRatio: `${SLIDE_WIDTH} / ${SLIDE_HEIGHT}`,
-        backgroundColor: resolveColor(slide.background, theme),
+        backgroundColor: slideBackgroundColor(slide.background, theme),
         containerType: "size",
       }}
     >
       {slide.elements.map((element) => (
-        <ElementRenderer key={element.id} element={element} theme={theme} />
+        <ElementRenderer key={element.id} element={element} theme={elementTheme} />
       ))}
     </div>
   );

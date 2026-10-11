@@ -5,7 +5,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Slide as SlideType, SlideElement, Palette } from "@/lib/schema";
 import { SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/schema";
 import { boxStyle, pixelDeltaToLogical } from "@/lib/coordinates";
-import { resolveColor, fontFaceVar } from "@/lib/themes";
+import { resolveColor, fontFaceVar, slideBackgroundColor, effectivePalette } from "@/lib/themes";
 import ChartGraphic from "./ChartGraphic";
 import TableGraphic from "./TableGraphic";
 
@@ -102,6 +102,10 @@ export default function SlideEditor({
   };
 
   const selectedElement = slide.elements.find((el) => el.id === selectedId) ?? null;
+  // Same per-slide remap Slide.tsx uses — a slide on the deck's dark
+  // "contrastBackground" needs its elements resolving text/accent/muted
+  // against the contrast variants, not the deck's main-mood colors.
+  const elementTheme = effectivePalette(theme, slide.background);
 
   return (
     <div className="flex flex-col gap-2">
@@ -110,7 +114,7 @@ export default function SlideEditor({
         className="relative w-full select-none overflow-hidden rounded-2xl shadow-2xl"
         style={{
           aspectRatio: `${SLIDE_WIDTH} / ${SLIDE_HEIGHT}`,
-          backgroundColor: resolveColor(slide.background, theme),
+          backgroundColor: slideBackgroundColor(slide.background, theme),
           containerType: "size",
         }}
         onPointerMove={handlePointerMove}
@@ -124,7 +128,7 @@ export default function SlideEditor({
           <EditableElement
             key={element.id}
             element={element}
-            theme={theme}
+            theme={elementTheme}
             selected={selectedId === element.id}
             editing={editingId === element.id}
             onPointerDown={(e) => handleElementPointerDown(e, element)}
