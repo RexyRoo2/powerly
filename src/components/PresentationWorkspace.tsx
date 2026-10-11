@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import type { Presentation } from "@/lib/schema";
-import { PresentationSchema } from "@/lib/schema";
 import { compressImageFile } from "@/lib/compressImage";
 
 type Status = "input" | "generating" | "error";
@@ -84,8 +83,12 @@ export default function PresentationWorkspace({
       if (!res.ok) {
         throw new Error(data?.error || "Something went wrong generating your deck.");
       }
-      const parsed = PresentationSchema.parse(data.presentation);
-      onPresentationReady(parsed);
+      // The server already validated this with Zod before sending it — don't
+      // re-check it against this tab's own copy of the schema. If a deploy
+      // shipped a schema change while this tab was still open, re-parsing
+      // here against the OLD, in-memory schema would reject perfectly valid
+      // new data and throw a raw, scary-looking Zod error at the student.
+      onPresentationReady(data.presentation as Presentation);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setStatus("error");

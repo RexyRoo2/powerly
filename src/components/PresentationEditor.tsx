@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import type { Presentation, Slide as SlideType } from "@/lib/schema";
-import { PresentationSchema } from "@/lib/schema";
 import SlideEditor from "./SlideEditor";
 import Slide from "./Slide";
 
@@ -94,7 +93,10 @@ export default function PresentationEditor({
       if (!res.ok) {
         throw new Error(data?.error || "Something went wrong.");
       }
-      const parsedPresentation = PresentationSchema.parse(data.presentation);
+      // Same reasoning as PresentationWorkspace.tsx's handleGenerate: trust
+      // the server's own Zod validation instead of re-checking against this
+      // tab's possibly-stale, already-loaded copy of the schema.
+      const parsedPresentation = data.presentation as Presentation;
       setPendingEdit({ presentation: parsedPresentation, summaries: data.summaries ?? [] });
       setActiveIndex(0);
       setEditStatus("idle");
