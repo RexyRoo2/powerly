@@ -290,3 +290,41 @@ function assertNoOverlaps() {
 if (process.env.NODE_ENV !== "production") {
   assertNoOverlaps();
 }
+
+// ---------------------------------------------------------------------------
+// Stack regions
+//
+// A multi-column layout's slots above are all FIXED heights — a card body
+// with one sentence and a card body with five get the identical box, so the
+// short one strands its text at the top of empty space and the long one has
+// to shrink or overflow. A "stack region" is an ordered list of one column's
+// own slot names: presentationGen.ts measures each slot's REAL content
+// height (not its nominal box height) and re-stacks them tightly, one right
+// after another, starting from the same fixed top every sibling column
+// already shares — so card/column headings across a row stay aligned with
+// each other exactly as before. Only a slot's height, and everything below
+// it in its OWN column, ever moves; x/width/fontSize/fontFamily/lineHeight
+// above remain the one source of truth for every slot, stacked or not.
+// ---------------------------------------------------------------------------
+
+export const STACK_REGIONS: Record<string, string[][]> = {
+  "two-column": [
+    ["leftHeading", "leftBody"],
+    ["rightHeading", "rightBody"],
+  ],
+  "three-cards": [
+    ["card1Title", "card1Body"],
+    ["card2Title", "card2Body"],
+    ["card3Title", "card3Body"],
+  ],
+  "stat-pair": [
+    ["statAValue", "statALabel"],
+    ["statBValue", "statBLabel"],
+  ],
+};
+
+// Which "*Bg" slot (if any) wraps a given region, by that region's index in
+// STACK_REGIONS above — only three-cards has a background panel per column.
+export const STACK_REGION_BG_SLOTS: Record<string, Array<string | undefined>> = {
+  "three-cards": ["card1Bg", "card2Bg", "card3Bg"],
+};

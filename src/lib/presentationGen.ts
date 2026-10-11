@@ -15,6 +15,8 @@ import {
   getSlot,
   isKnownLayout,
   SPACING_PROFILE_NAMES,
+  STACK_REGIONS,
+  STACK_REGION_BG_SLOTS,
   type Slot,
   type SpacingProfile,
 } from "./layoutTemplates";
@@ -114,8 +116,9 @@ Some layouts have optional slots (e.g. "eyebrow", "footnote", "subtitle") — sk
 - Use "fontFamily": "display" only for slide titles or one big standalone statement per slide (most slots already default to the right one). Use "body" for everything else.
 - If attached images contain photographed/handwritten notes, read and incorporate their content the same as typed notes. If an attached image is itself worth showing on the slide as a visual (a diagram or graph the student photographed), place it with an "image" element whose "src" is EXACTLY the image's given id (e.g. "upload-1") — never invent a URL or filename, and never use an id that wasn't given to you.
 - Use a "chart" only for real numeric data present in the material — never invent numbers. Use a "table" only for real structured info (a comparison, a list of terms, stats) — keep it small enough to read on a slide.
-- Vary layout across slides — don't repeat "title-body" every time. Reach for "big-statistic", "stat-pair", "three-cards" (only when the content is genuinely 2-3 parallel items), "two-column", "chart-text", or "table" wherever the content actually fits that shape better than a title + paragraph.
-- Keep slotted text roughly within what the slot is sized for — a short, punchy line, not a full paragraph, unless the slot is specifically a "body" slot. If content for a slot genuinely runs long, that's fine; it will shrink to fit automatically rather than overflow.
+- Vary layout across slides — don't repeat "title-body" every time, and never use the exact same layout on two slides in a row. Reach for "big-statistic", "stat-pair", "three-cards" (only when the content is genuinely 2-3 parallel items), "two-column", "chart-text", or "table" wherever the content actually fits that shape better than a title + paragraph.
+- Most slots are sized for short, punchy lines, not full paragraphs. The exception: a card/column body inside "two-column", "three-cards", or "stat-pair" actually measures what you write and resizes its own box (and, for cards, the card panel behind it) to fit — so write the right AMOUNT for what you're saying there, not to deliberately fill or avoid filling a box. Elsewhere, if content for a slot still runs long, it shrinks to fit rather than overflow.
+- Never end a slide title with a period. Never center body or caption text — left-align it; centering is reserved for titles and big standalone statements.
 - Design this deck's own "palette" from scratch — never fall back to the same look deck after deck. The single most common failure mode for an AI designing a palette (yours included) is a near-black background with a warm orange/red/terracotta accent, regardless of subject — treat that exact combination as off-limits unless you're given no other direction and the subject is specifically about fire or heat, and even then prefer something more specific than generic terracotta. If you're told to design a DARK or LIGHT deck below, that instruction is mandatory and comes first; fit the subject's hues into it rather than overriding it. Ground the hues in THIS subject's own vibe: oceans/water → blues; fire/volcanoes/energy → warm reds and oranges; plants/botany → greens; space → deep indigo/violet; finance/business → navy and gold; a light, paper-like humanities topic → cream/ink tones; a playful or young-audience topic → bright, saturated, lighter colors. Pick exactly one dark color, one light color, and 1-2 accents — never more — and keep background/surface close to each other (both read as the same light-or-dark family; a light deck's "surface" is a touch warmer or cooler than its "background", not a dark card floating on a light page, and vice versa). "text" needs strong contrast against "background" — this is checked and corrected automatically if it's too close, but aim to get it right the first time. Also design "contrastBackground" — the OPPOSITE mode from background/surface (light if they're dark, dark if they're light), from the same color story (e.g. the deepest or lightest tone already implied by the hue you picked). Pick "fontDisplay"/"fontBody" deliberately for THIS subject — there are 8 real choices, not 3, and picking the same pairing deck after deck is exactly the kind of sameness to avoid: "inter" (clean neutral grotesk — safe, modern, works for almost anything as a BODY font, less interesting as a display font), "outfit" (geometric sans with more shape, confident/modern), "space-grotesk" (technical, engineered-feeling sans — science, space, tech topics), "instrument-serif" (elegant high-contrast display serif — editorial/academic), "playfair-display" (classic dramatic high-contrast serif — history, formal, humanities), "fraunces" (warm soft-edged serif with character — nature, biology, creative/humanities topics), "libre-baskerville" (a classic, highly readable BOOK serif — a literary or historical deck can use this as body text, not just display), "jetbrains-mono" (monospace — great for a CS/math/data-heavy deck, especially as the display font for a big stat number). Don't reach for "instrument-serif" + "inter" out of habit — that pairing is fine sometimes, but it should be a deliberate choice for THIS deck, not the default. If fontDisplay is already a strong character font, fontBody usually stays plainer for readability.
 - Every slide's "background" is "background" or "surface" by default (the deck's main mood) — EXCEPT exactly 1-2 slides, which should use "contrastBackground" instead, for deliberate emphasis: the best candidates are the title slide, the closing slide, or ONE striking mid-deck moment (a single dramatic statistic, a case study). This mirrors how a real designer alternates a dark hero section with light content sections in the same color story, instead of every slide having the same mood. Don't use "contrastBackground" on more than 2-3 slides in one deck — it's for emphasis, not the deck's default.
 - Give the whole presentation a short, clear "title", and a short "subject" label (1-3 words, e.g. "Biology", "History", "Debate club") that best categorizes it.`;
@@ -155,14 +158,23 @@ function pick<T extends string>(v: unknown, allowed: Set<T>, fallback: T): T {
   return typeof v === "string" && allowed.has(v as T) ? (v as T) : fallback;
 }
 
+/** A slot's geometry, as either the static template defines it or a
+ * per-slide stack override recomputed from real content (see
+ * computeStackedGeometry below). */
+type ResolvedBox = { x: number; y: number; width: number; height: number };
+
 /**
  * Resolves an element's real geometry. If it names a "slot" that exists on
- * the slide's layout template, that slot's hand-measured box wins — ALWAYS
- * — regardless of what (if anything) the model also sent for x/y/width/
- * height. This is the actual fix for the title/accent-line collision bug:
- * the model is no longer the source of truth for geometry on any element
- * that has a slot, so it can't place two slotted elements on top of each
- * other even if it tried.
+ * the slide's layout template, that slot's box wins — ALWAYS — regardless
+ * of what (if anything) the model also sent for x/y/width/height. This is
+ * the actual fix for the title/accent-line collision bug: the model is no
+ * longer the source of truth for geometry on any element that has a slot,
+ * so it can't place two slotted elements on top of each other even if it
+ * tried. A stack-region override (a box recomputed from this slide's own
+ * content, not the hand-measured static one) takes priority over the
+ * static slot's position/size when one exists for this slot name — the
+ * slot's other defaults (fontSize, role, align, fontFamily) still come
+ * from the static template either way.
  *
  * Falls back to explicit x/y/width/height (the old behavior) when there's
  * no slot — the "custom" layout, or a slot name that doesn't exist on this
@@ -171,11 +183,16 @@ function pick<T extends string>(v: unknown, allowed: Set<T>, fallback: T): T {
 function resolveGeometry(
   el: Record<string, unknown>,
   layout: string,
-  profile: SpacingProfile
+  profile: SpacingProfile,
+  stackOverrides: Record<string, ResolvedBox>
 ): { x: number; y: number; width: number; height: number; slot?: Slot } | null {
   const slotName = typeof el.slot === "string" ? el.slot : undefined;
   if (slotName) {
     const slot = getSlot(layout, slotName, profile);
+    const override = stackOverrides[slotName];
+    if (override) {
+      return { ...override, slot };
+    }
     if (slot) {
       return { x: slot.x, y: slot.y, width: slot.width, height: slot.height, slot };
     }
@@ -195,14 +212,26 @@ function resolveGeometry(
  * Returns null if the element is too broken to use (missing geometry, or an
  * unrecognized/unresolvable type) — callers drop it rather than fail.
  */
+/** Never ends a slide title with a period — a hallmark of AI-generated
+ * slides per the design rulebook. Leaves "…", "!", "?" alone; only strips a
+ * single trailing ".". Scoped to the "title" slot specifically (not every
+ * role="title" element — a closing statement or a stat value is allowed to
+ * punctuate itself normally). */
+function stripTrailingPeriod(s: string): string {
+  const trimmed = s.trimEnd();
+  if (trimmed.endsWith("...") || trimmed.endsWith("!") || trimmed.endsWith("?")) return trimmed;
+  return trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
+}
+
 function normalizeElement(
   el: Record<string, unknown>,
   imagesById: Map<string, string>,
   layout: string,
-  profile: SpacingProfile
+  profile: SpacingProfile,
+  stackOverrides: Record<string, ResolvedBox>
 ): Record<string, unknown> | null {
   if (!el || typeof el !== "object") return null;
-  const geometry = resolveGeometry(el, layout, profile);
+  const geometry = resolveGeometry(el, layout, profile, stackOverrides);
   if (!geometry) return null;
   const { x, y, width, height, slot } = geometry;
   const box = { x, y, width, height };
@@ -210,18 +239,24 @@ function normalizeElement(
   switch (el.type) {
     case "text": {
       if (typeof el.content !== "string" || !el.content.trim()) return null;
+      const slotName = typeof el.slot === "string" ? el.slot : undefined;
+      const content = slotName === "title" ? stripTrailingPeriod(el.content) : el.content;
       const role = pick(el.role, TEXT_ROLES, slot?.role ?? "body");
       const fontFamily = pick(el.fontFamily, FONT_FAMILIES, slot?.fontFamily ?? "body");
       const fontSize = positiveNum(el.fontSize, slot?.fontSize ?? 18);
       const lineHeight = positiveNum(el.lineHeight, slot?.lineHeight ?? 1.3);
-      const align = pick(el.align, ALIGNS, slot?.align ?? "left");
+      let align = pick(el.align, ALIGNS, slot?.align ?? "left");
+      // Never center body/caption copy — center is reserved for titles and
+      // big standalone statements (design rulebook). Enforced here, not
+      // just asked of the model, since nothing else catches it.
+      if ((role === "body" || role === "caption") && align === "center") align = "left";
 
       // The last line of defense: even with a hand-measured slot, long
       // content at a given font size can still be more than the box can
       // hold. Shrink (then, as an absolute last resort, truncate) rather
       // than let it silently overflow into whatever's next.
       const fitted = fitTextToBox({
-        content: el.content,
+        content,
         width,
         height,
         fontSize,
@@ -338,6 +373,82 @@ const BOTTOM_MARGIN = 70;
 // 0.55 let that through unchanged, so this sits meaningfully higher.
 const REBALANCE_THRESHOLD = 0.72;
 
+// Gap between consecutive slots in a stack region (a card's title->body,
+// a column's heading->body), and the extra breathing room a region's "*Bg"
+// panel keeps around the content it wraps. Small and fixed rather than
+// profile-scaled — these are internal spacing choices, not margins.
+const STACK_GAP = 10;
+const STACK_BG_PADDING = 20;
+
+/**
+ * The content-driven replacement for a fixed-height slot. See STACK_REGIONS
+ * in layoutTemplates.ts for the "why". For every stack region in this
+ * layout, measures each present slot's REAL content height (via
+ * estimateTextBlockHeight, the same estimate fitTextToBox itself grows/
+ * shrinks against) and restacks the region tightly from the same fixed top
+ * every sibling column already shares, capped at a ceiling (the layout's
+ * optional "footnote" slot if it has one, else a bottom margin) so a
+ * long card can grow but never collide with what's below it. A region's
+ * wrapping "*Bg" panel (three-cards only) is sized to hug exactly what it
+ * ends up wrapping, instead of a fixed box that over- or under-shoots.
+ *
+ * Returns {} for any layout with no stack regions — every other layout's
+ * slots are untouched, resolved from the static template exactly as before.
+ */
+function computeStackedGeometry(
+  layout: string,
+  profile: SpacingProfile,
+  elementsInput: Array<Record<string, unknown>>
+): Record<string, ResolvedBox> {
+  const regions = STACK_REGIONS[layout];
+  if (!regions) return {};
+  const bgSlots = STACK_REGION_BG_SLOTS[layout];
+  const overrides: Record<string, ResolvedBox> = {};
+
+  const footnoteSlot = getSlot(layout, "footnote", profile);
+  const ceilingY = footnoteSlot ? footnoteSlot.y - 10 : SLIDE_HEIGHT - BOTTOM_MARGIN;
+
+  regions.forEach((regionSlotNames, regionIndex) => {
+    const firstStatic = getSlot(layout, regionSlotNames[0], profile);
+    if (!firstStatic) return;
+    const regionTop = firstStatic.y;
+    let cursorY = regionTop;
+    let any = false;
+
+    for (const slotName of regionSlotNames) {
+      const staticSlot = getSlot(layout, slotName, profile);
+      if (!staticSlot) continue;
+      const matching = elementsInput.find(
+        (e) => e && typeof e === "object" && (e as Record<string, unknown>).type === "text" && (e as Record<string, unknown>).slot === slotName
+      ) as Record<string, unknown> | undefined;
+      const content = typeof matching?.content === "string" ? matching.content.trim() : "";
+      if (!content) continue; // nothing to stack here — leave no gap behind it either
+
+      const fontSize = positiveNum(matching?.fontSize, staticSlot.fontSize);
+      const lineHeight = positiveNum(matching?.lineHeight, staticSlot.lineHeight ?? 1.3);
+      const naturalHeight = estimateTextBlockHeight(content, staticSlot.width, fontSize, lineHeight, staticSlot.fontFamily);
+      const remaining = Math.max(24, ceilingY - cursorY);
+      const height = Math.min(naturalHeight, remaining);
+
+      overrides[slotName] = { x: staticSlot.x, y: Math.round(cursorY), width: staticSlot.width, height: Math.round(height) };
+      cursorY += height + STACK_GAP;
+      any = true;
+    }
+
+    const bgSlotName = bgSlots?.[regionIndex];
+    if (any && bgSlotName) {
+      const staticBg = getSlot(layout, bgSlotName, profile);
+      if (staticBg) {
+        const bgTop = regionTop - STACK_BG_PADDING;
+        const bgBottom = Math.min(cursorY - STACK_GAP + STACK_BG_PADDING, ceilingY + STACK_BG_PADDING);
+        overrides[bgSlotName] = { x: staticBg.x, y: Math.round(bgTop), width: staticBg.width, height: Math.round(bgBottom - bgTop) };
+      }
+    }
+  });
+
+  return overrides;
+}
+
 /**
  * A slide whose layout box has far more room than its content needs doesn't
  * shrink that box — text renders top-anchored within its slot, so it just
@@ -419,9 +530,15 @@ export function shapeIntoPresentation(
     // explicit x/y/width/height rather than a slot that doesn't exist.
     const layout = typeof slide?.layout === "string" && isKnownLayout(slide.layout) ? slide.layout : "custom";
     const elementsInput = Array.isArray(slide?.elements) ? slide.elements : [];
+    // Computed once per slide from THIS slide's own content — see
+    // computeStackedGeometry. Every element below (model-provided or the
+    // server's own synthetic card backgrounds) resolves through the same
+    // overrides, so a card's background always wraps whatever its title/
+    // body actually ended up measuring, not a fixed guess.
+    const stackOverrides = computeStackedGeometry(layout, spacingProfile, elementsInput);
     const elements = elementsInput
       .map((el, elIndex): Record<string, unknown> | null => {
-        const normalized = normalizeElement(el, imagesById, layout, spacingProfile);
+        const normalized = normalizeElement(el, imagesById, layout, spacingProfile, stackOverrides);
         if (!normalized) return null;
         return { ...normalized, id: `${slideId}-el-${elIndex + 1}` };
       })
@@ -446,7 +563,8 @@ export function shapeIntoPresentation(
           { type: "shape", slot: slotName, fill: "surface", stroke: "muted", radius: 16 },
           imagesById,
           layout,
-          spacingProfile
+          spacingProfile,
+          stackOverrides
         );
         if (!normalized) return null;
         return { ...normalized, id: `${slideId}-bg-${i + 1}` };
