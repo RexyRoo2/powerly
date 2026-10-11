@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { PresentationSchema } from "@/lib/schema";
-import { GENERATE_TOOL, SYSTEM_PROMPT, shapeIntoPresentation } from "@/lib/presentationGen";
+import { PresentationSchema, type Palette } from "@/lib/schema";
+import {
+  GENERATE_TOOL,
+  SYSTEM_PROMPT,
+  shapeIntoPresentation,
+  pickBackgroundDirective,
+  describeRecentPalettes,
+} from "@/lib/presentationGen";
 
 export const runtime = "nodejs";
 
@@ -96,7 +102,26 @@ export async function POST(req: Request) {
 
   const client = new Anthropic({ apiKey });
 
-  const content: Anthropic.MessageParam["content"] = [];
+  // Two layers guarding against every deck looking the same (see
+  // presentationGen.ts for why prompt wording alone isn't a real
+  // guarantee): a mandatory light/dark coin-flip decided here, outside the
+  // model's control, plus a best-effort "don't repeat these" note built
+  // from whatever this student has actually saved so far.
+  const { value: backgroundValue, instruction: backgroundInstruction } = pickBackgroundDirective();
+  const { data: recentRows } = await supabase
+    .from("presentations")
+    .select("data")
+    .order("updated_at", { ascending: false })
+    .limit(5);
+  const recentPalettes = (recentRows ?? [])
+    .map((row) => (row as { data?: { theme?: unknown } }).data?.theme)
+    .filter((t): t is Palette => !!t && typeof t === "object" && "colors" in (t as object));
+  const recentPaletteNote = describeRecentPalettes(recentPalettes);
+
+  const content: Anthropic.MessageParam["content"] = [
+    { type: "text", text: backgroundInstruction },
+    ...(recentPaletteNote ? [{ type: "text" as const, text: recentPaletteNote }] : []),
+  ];
   if (images.length > 0) {
     content.push({
       type: "text",
@@ -132,7 +157,7 @@ export async function POST(req: Request) {
       messages: [{ role: "user", content }],
     });
   } catch (err) {
-    console.error("Anthropic request failed", err);
+    console.error("Anthropic request failed", { backgroundValue, err });
     return NextResponse.json({ error: "The AI request failed. Try again in a moment." }, { status: 502 });
   }
 
@@ -169,6 +194,12 @@ export async function POST(req: Request) {
       { status: 502 }
     );
   }
+
+  console.log("Generated presentation", {
+    backgroundDirective: backgroundValue,
+    resolvedBackground: parsed.data.theme.colors.background,
+    accent: parsed.data.theme.colors.accent,
+  });
 
   return NextResponse.json({ presentation: parsed.data });
 }

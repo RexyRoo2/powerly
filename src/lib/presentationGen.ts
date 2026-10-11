@@ -13,6 +13,7 @@ import { LAYOUT_NAMES, LAYOUT_TEMPLATES, getSlot, isKnownLayout, type Slot } fro
 import { fitTextToBox, type FitRole, type FitFontFamily } from "./textFit";
 import { normalizePalette } from "./paletteFit";
 import { DEFAULT_PALETTE } from "./themes";
+import type { Palette } from "./schema";
 
 /**
  * Pure presentation-generation logic for /api/generate — the AI tool
@@ -102,7 +103,7 @@ Some layouts have optional slots (e.g. "eyebrow", "footnote", "subtitle") — sk
 - Use a "chart" only for real numeric data present in the material — never invent numbers. Use a "table" only for real structured info (a comparison, a list of terms, stats) — keep it small enough to read on a slide.
 - Vary layout across slides — don't repeat "title-body" every time. Reach for "big-statistic", "stat-pair", "three-cards" (only when the content is genuinely 2-3 parallel items), "two-column", "chart-text", or "table" wherever the content actually fits that shape better than a title + paragraph.
 - Keep slotted text roughly within what the slot is sized for — a short, punchy line, not a full paragraph, unless the slot is specifically a "body" slot. If content for a slot genuinely runs long, that's fine; it will shrink to fit automatically rather than overflow.
-- Design this deck's own "palette" from scratch — never fall back to the same colors every time. Ground the hues in THIS subject's own vibe: oceans/water → blues; fire/energy → warm reds and oranges; plants/nature → greens; space → deep indigo/violet; a neutral humanities topic can stay close to ink-on-paper tones. Pick exactly one dark color, one light color (background/surface close to each other), and 1-2 accents — never more. Favor a confident, specific accent over a generic default (don't reach for the same orange or teal on every deck regardless of subject). "text" needs strong contrast against "background" — this is checked and corrected automatically if it's too close, but aim to get it right the first time. Pick "fontDisplay"/"fontBody" to fit the subject's tone too (e.g. "instrument-serif" reads editorial/academic, "outfit" reads modern/geometric, "inter" is the safe neutral default) — they can match if that suits the deck.
+- Design this deck's own "palette" from scratch — never fall back to the same look deck after deck. The single most common failure mode for an AI designing a palette (yours included) is a near-black background with a warm orange/red/terracotta accent, regardless of subject — treat that exact combination as off-limits unless you're given no other direction and the subject is specifically about fire or heat, and even then prefer something more specific than generic terracotta. If you're told to design a DARK or LIGHT deck below, that instruction is mandatory and comes first; fit the subject's hues into it rather than overriding it. Ground the hues in THIS subject's own vibe: oceans/water → blues; fire/volcanoes/energy → warm reds and oranges; plants/botany → greens; space → deep indigo/violet; finance/business → navy and gold; a light, paper-like humanities topic → cream/ink tones; a playful or young-audience topic → bright, saturated, lighter colors. Pick exactly one dark color, one light color, and 1-2 accents — never more — and keep background/surface close to each other (both read as the same light-or-dark family; a light deck's "surface" is a touch warmer or cooler than its "background", not a dark card floating on a light page, and vice versa). "text" needs strong contrast against "background" — this is checked and corrected automatically if it's too close, but aim to get it right the first time. Pick "fontDisplay"/"fontBody" to fit the subject's tone too (e.g. "instrument-serif" reads editorial/academic, "outfit" reads modern/geometric, "inter" is the safe neutral default) — vary the pairing across decks too, don't default to the same one every time.
 - Give the whole presentation a short, clear "title", and a short "subject" label (1-3 words, e.g. "Biology", "History", "Debate club") that best categorizes it.`;
 
 // ---------------------------------------------------------------------------
@@ -335,4 +336,35 @@ export function shapeIntoPresentation(input: unknown, imagesById: Map<string, st
     theme: normalizePalette(raw.palette, DEFAULT_PALETTE),
     slides,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Cross-generation palette diversity
+//
+// SYSTEM_PROMPT's "don't default to dark+orange" wording is only a
+// suggestion the model is free to ignore — and it's fighting a strong prior
+// (the AI-generated-design cliché of a near-black background with a warm
+// accent is extremely common across models), so prompt wording alone isn't
+// a real guarantee. These two functions move the diversity guarantee
+// outside the model's discretion and onto the server, which IS guaranteed:
+// pickBackgroundDirective hands down a mandatory light/dark constraint
+// decided before the model ever runs, so two back-to-back generations on
+// the same notes can't both land on the same value family by coincidence.
+// describeRecentPalettes is a secondary, best-effort layer on top, for
+// when there's real saved history to actively avoid repeating.
+// ---------------------------------------------------------------------------
+
+export function pickBackgroundDirective(): { value: "dark" | "light"; instruction: string } {
+  const value: "dark" | "light" = Math.random() < 0.5 ? "dark" : "light";
+  const instruction = `For THIS deck specifically, design a clearly ${value.toUpperCase()} palette: "background" and "surface" must both read as unmistakably ${value} (not a middle gray), with ${value === "dark" ? "light" : "dark"} "text" on top. This is assigned per-generation, independently of any other deck, specifically so repeated decks don't all come out looking the same — it is not optional. Work the subject's own hues into this ${value} palette rather than fighting it (e.g. a dark deck about oceans can still read as deep navy/teal; a light deck about fire can still use warm cream with a red/orange accent).`;
+  return { value, instruction };
+}
+
+export function describeRecentPalettes(recent: Palette[]): string | null {
+  const usable = recent.filter((p): p is Palette => !!p && !!p.colors).slice(0, 5);
+  if (usable.length === 0) return null;
+  const lines = usable.map(
+    (p, i) => `  ${i + 1}. background ${p.colors.background}, accent ${p.colors.accent}, fonts ${p.fontDisplay}/${p.fontBody}`
+  );
+  return `This student's most recently generated decks used these palettes:\n${lines.join("\n")}\nDesign something that doesn't resemble any of these — a different background tone and a different accent hue at minimum, even with the mandatory light/dark direction above.`;
 }
