@@ -429,8 +429,16 @@ function computeStackedGeometry(
       const naturalHeight = estimateTextBlockHeight(content, staticSlot.width, fontSize, lineHeight, staticSlot.fontFamily);
       const remaining = Math.max(24, ceilingY - cursorY);
       const height = Math.min(naturalHeight, remaining);
-
-      overrides[slotName] = { x: staticSlot.x, y: Math.round(cursorY), width: staticSlot.width, height: Math.round(height) };
+      // Round UP, never to-nearest. estimateTextBlockHeight (here) and
+      // fitTextToBox's own capacity check (textFit.ts) are exact inverses
+      // of each other in real-number arithmetic — a box sized for exactly N
+      // lines passes a check for exactly N lines — but that check floors
+      // (height / lineUnit) to decide how many lines fit. Math.round can
+      // shave the needed box height DOWN below an exact N-line boundary
+      // (e.g. 102.48 -> 102), and that floor() then reads it as N-1 lines
+      // and truncates content this box was correctly sized to hold.
+      // Math.ceil never removes that margin, so the two stay consistent.
+      overrides[slotName] = { x: staticSlot.x, y: Math.round(cursorY), width: staticSlot.width, height: Math.ceil(height) };
       cursorY += height + STACK_GAP;
       any = true;
     }
